@@ -12,8 +12,6 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from main import create_app
-
 
 @pytest.fixture(autouse=True)
 def disable_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -22,6 +20,8 @@ def disable_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture()
 def client() -> Generator[TestClient, None, None]:
+    from main import create_app
+
     app = create_app()
     with TestClient(app) as test_client:
         yield test_client
