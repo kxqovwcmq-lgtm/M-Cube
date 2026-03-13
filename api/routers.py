@@ -131,101 +131,77 @@ def _extract_examiner_opinion_text(notice_text: str, *, notice_pages: list[str] 
     if not text:
         return "", False
 
-    # Strategy 1 (highest priority, hard rule from business):
-    # start from page 3, stop when "���Ա����" or "���Ա����" appears.
-    if notice_pages and len(notice_pages) >= 3:
-        body = "\n\n".join((page or "").strip() for page in notice_pages[2:]).strip()
-        end_markers = ("���Ա����", "���Ա����")
-        end_pos = -1
-        for marker in end_markers:
-            pos = body.find(marker)
-            if pos >= 0 and (end_pos < 0 or pos < end_pos):
-                end_pos = pos
-        if end_pos >= 0:
-            candidate = body[:end_pos].strip()
-        else:
-            candidate = body
-        if len(candidate) >= 40:
-            return candidate, True
-
-    # Strategy 2:
-    # use content after the 2nd occurrence of "��x��������֪ͨ��", until "��������".
     import re
 
-    issue_title_pattern = re.compile(r"��[һ�����������߰˾�ʮ0-9]+��������֪ͨ��")
+    # Normal Chinese + mojibake variants from CI fixtures.
+    signature_markers = (
+        "审查员姓名",
+        "审查员代码",
+        "审查员：",
+        "审查员:",
+        "瀹℃煡鍛樺鍚",
+        "瀹℃煡鍛樹唬鐮",
+        "瀹℃煡鍛樺鍚嶏細",
+        "瀹℃煡鍛樹唬鐮侊細",
+    )
+    retrieval_markers = (
+        "检索报告",
+        "检索式",
+        "引用文件",
+        "妫€绱㈡姤鍛",
+        "妫€绱㈠紡",
+        "寮曠敤鏂囦欢",
+    )
+    opinion_heading_markers = (
+        "审查员具体意见",
+        "审查员认为",
+        "具体意见",
+        "瀹℃煡鍛樺叿浣撴剰瑙",
+        "瀹℃煡鍛樿涓",
+    )
+
+    def _cut_at_earliest(source: str, markers: tuple[str, ...], *, from_pos: int = 0) -> int:
+        end_pos = -1
+        for marker in markers:
+            pos = source.find(marker, from_pos)
+            if pos >= 0 and (end_pos < 0 or pos < end_pos):
+                end_pos = pos
+        return end_pos
+
+    # Strategy 1: page-level fallback (from page 3 onward), then cut signature lines.
+    if notice_pages and len(notice_pages) >= 3:
+        body = "\n\n".join((page or "").strip() for page in notice_pages[2:]).strip()
+        sig_pos = _cut_at_earliest(body, signature_markers)
+        candidate = body[:sig_pos].strip() if sig_pos >= 0 else body
+        if len(candidate) >= 20:
+            return candidate, True
+
+    # Strategy 2: start from the second "审查意见通知书" title block if present.
+    issue_title_pattern = re.compile(
+        r"(第\s*\d+\s*次审查意见通知书|绗.\s*\d+\s*娆.*?閫氱煡涔)",
+        flags=re.IGNORECASE,
+    )
     issue_matches = list(issue_title_pattern.finditer(text))
     if len(issue_matches) >= 2:
         start_pos = issue_matches[1].end()
-        retrieval_pattern = re.compile(r"��������|������Ϣ|����ʽ|�����ļ�|�Ա��ļ�")
-        end_match = retrieval_pattern.search(text, start_pos)
-        if end_match is not None and end_match.start() > start_pos:
-            candidate = text[start_pos:end_match.start()].strip()
-            if len(candidate) >= 40:
-                return candidate, True
-
-    # Strategy 3: explicit heading range (best-effort for common CN OA structure).
-    lines = [line.strip() for line in text.split("\n")]
-    start_keywords = (
-        "���Ա�������",
-        "����������",
-        "������",
-        "�������",
-        "�������",
-    )
-    end_keywords = (
-        "��������",
-        "������Ϣ",
-        "����ʽ",
-        "�����ļ�",
-        "�Ա��ļ�",
-    )
-
-    def _find_heading_idx(keywords: tuple[str, ...], *, begin: int = 0) -> int | None:
-        for idx in range(begin, len(lines)):
-            line = lines[idx]
-            if not line:
-                continue
-            # Heuristic: heading lines are short and usually do not end with full sentences.
-            if len(line) > 32:
-                continue
-            if "��" in line or "��" in line or ";" in line:
-                continue
-            if any(keyword in line for keyword in keywords):
-                return idx
-        return None
-
-    start_idx = _find_heading_idx(start_keywords, begin=0)
-    if start_idx is not None:
-        end_idx = _find_heading_idx(end_keywords, begin=start_idx + 1)
-        body_start = min(start_idx + 1, len(lines))
-        body_end = end_idx if end_idx is not None else len(lines)
-        candidate = "\n".join(line for line in lines[body_start:body_end] if line).strip()
-        if len(candidate) >= 40:
+        end_pos = _cut_at_earliest(text, retrieval_markers + signature_markers, from_pos=start_pos)
+        candidate = text[start_pos:end_pos].strip() if end_pos >= 0 else text[start_pos:].strip()
+        if len(candidate) >= 20:
             return candidate, True
 
-    # Strategy 4: split between "����" and "��������" markers if present.
-    conclusion_markers = ("����", "������", "����������")
-    retrieval_markers = ("��������", "������Ϣ", "����ʽ", "�����ļ�", "�Ա��ļ�")
-    lower = text
-    begin = -1
-    for marker in conclusion_markers:
-        pos = lower.find(marker)
-        if pos >= 0:
-            begin = pos + len(marker)
-            break
-    if begin >= 0:
-        end = -1
-        for marker in retrieval_markers:
-            pos = lower.find(marker, begin)
-            if pos >= 0 and (end < 0 or pos < end):
-                end = pos
-        if end > begin:
-            candidate = lower[begin:end].strip()
-            if len(candidate) >= 40:
-                return candidate, True
+    # Strategy 3: explicit examiner-opinion heading.
+    start_pos = -1
+    for marker in opinion_heading_markers:
+        pos = text.find(marker)
+        if pos >= 0 and (start_pos < 0 or pos < start_pos):
+            start_pos = pos
+    if start_pos >= 0:
+        end_pos = _cut_at_earliest(text, retrieval_markers + signature_markers, from_pos=start_pos)
+        candidate = text[start_pos:end_pos].strip() if end_pos >= 0 else text[start_pos:].strip()
+        if len(candidate) >= 20:
+            return candidate, True
 
     return text, False
-
 
 def _extract_original_claims_text(application_text: str) -> tuple[str, bool, str]:
     """

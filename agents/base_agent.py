@@ -89,7 +89,20 @@ class BaseStructuredAgent(Generic[T]):
             try:
                 raw_response = self._llm_callable(prompt, context_payload)
                 try:
-                    normalized = self._normalize_response(raw_response)
+                    if isinstance(raw_response, str) and not self._is_strict_json_object(raw_response):
+                        repaired = self._attempt_json_repair(
+                            raw_response=raw_response,
+                            output_model=output_model,
+                            context_payload=context_payload,
+                            parse_error=AgentValidationError("strict_json_parse_failed"),
+                        )
+                        if repaired is None:
+                            # Fall back to local normalization heuristics when LLM-repair is unavailable.
+                            normalized = self._normalize_response(raw_response)
+                        else:
+                            normalized = repaired
+                    else:
+                        normalized = self._normalize_response(raw_response)
                 except (AgentValidationError, json.JSONDecodeError, TypeError, ValueError) as parse_exc:
                     repaired = self._attempt_json_repair(
                         raw_response=raw_response,
@@ -229,6 +242,27 @@ class BaseStructuredAgent(Generic[T]):
                 raise AgentValidationError("Structured output must be a JSON object.")
             return payload
         raise AgentValidationError("Unsupported LLM response type.")
+
+    @staticmethod
+    def _is_strict_json_object(raw_response: str) -> bool:
+        """
+        Lightweight strict check used to decide whether to trigger LLM repair first.
+        Only accepts a top-level JSON object without heuristic recovery.
+        """
+        text = raw_response.replace("\ufeff", "").strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        text = BaseStructuredAgent._strip_non_json_wrappers(text)
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            return False
+        return isinstance(payload, dict)
 
     @staticmethod
     def _strip_non_json_wrappers(text: str) -> str:
