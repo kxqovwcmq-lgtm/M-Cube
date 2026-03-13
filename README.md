@@ -1,4 +1,4 @@
-﻿# M-Cube (M³) — Multi-thinking, Multimodal, Multi-verification Patent Drafting Assistant
+﻿# <img src="frontend/src-tauri/icons/icon.png" alt="M-Cube Icon" width="45" align="center" style="margin-right: 8px;" /> M-Cube (M³) — Multi-thinking, Multimodal, Multi-verification Patent Drafting Assistant
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Backend: FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -8,25 +8,11 @@
 
 M-Cube is a multi-thinking, multimodal, and multi-verification multi-agent collaborative patent drafting assistant. It relies on LangGraph for multi-agent orchestration, introducing multiple AI Agents to conduct multi-step reasoning. At different stages, it accomplishes various functions—including patent drafting, Office Action (OA) responses, prior art comparison, and claim polishing—based on the multimodal information of patent text and drawings. Throughout the process, it incorporates multiple verifications, such as specification support checks and prior art text-to-image logical verifications, ultimately outputting patent documents with self-consistent technical solutions, robust claims, and mutually corroborating drawings and text.
 
----
-
-## ✨ Core Features
-
-M-Cube's technical moat is built upon three core features:
-
-* 🧠 **Multi-thinking**
-  
-  Based on LangGraph for multi-agent orchestration. Each function possesses a complete working chain of thought, utilizing multiple agents for in-depth analysis and reasoning of documents. It automatically executes multiple rounds of internal adversarial checks, chain-of-thought expansions, and logical reviews during specification drafting, OA responses, patent comparisons, and patent polishing.
-  
-* 👁️ **Multimodal**
-  
-  Leveraging underlying libraries like PyMuPDF and Pillow, alongside Vision LLMs, M-cube can directly read and dissect complex mechanical topological diagrams and prior art drawings. This achieves precise cross-mapping and verification between patent text and images.
-  
-* 🛡️ **Multi-verification**
-  
-  Built-in multiple legal compliance audits and anti-hallucination verifications. All output features must have concrete anchors in the technical disclosure or drawings. Human-in-the-Loop (HITL) mechanisms are introduced at critical nodes to ensure complete avoidance of Article 33 (modifying beyond the original scope) red-line risks.
-
 ## 💼 Workflows
+
+The workflows of M-Cube are illustrated below:
+
+![M-Cube Workflows](docs/images/workflow.png)
 
 M-Cube deeply abstracts the core working scenarios of patent attorneys, providing four industrial-grade workflows:
 
@@ -35,9 +21,21 @@ M-Cube deeply abstracts the core working scenarios of patent attorneys, providin
 3. 🔍 **Prior Art Comparison**: Analyzes the text and drawings of the current case and prior art documents. It compares features and connection relationships, outputting novelty/inventive step risk grading and subsequent modification suggestions.
 4. ✨ **Claim Polishing**: Reconstructs the application document, troubleshooting formal defects in the claims such as unclear preambles, lack of antecedent basis, and non-technical features. It also conducts a logical review of the modified documents.
 
-The workflows of M-Cube are illustrated below:
+## ✨ Core Features
 
-![M-Cube Workflows](docs/images/workflow.png)
+M-Cube's technical moat is built upon three core features:
+
+* 🧠 **Multi-thinking**
+
+  Based on LangGraph for multi-agent orchestration. Each function possesses a complete working chain of thought, utilizing multiple agents for in-depth analysis and reasoning of documents. It automatically executes multiple rounds of internal adversarial checks, chain-of-thought expansions, and logical reviews during specification drafting, OA responses, patent comparisons, and patent polishing.
+
+* 👁️ **Multimodal**
+
+  Leveraging underlying libraries like PyMuPDF and Pillow, alongside Vision LLMs, M-cube can directly read and dissect complex mechanical topological diagrams and prior art drawings. This achieves precise cross-mapping and verification between patent text and images.
+
+* 🛡️ **Multi-verification**
+
+  Built-in multiple legal compliance audits and anti-hallucination verifications. All output features must have concrete anchors in the technical disclosure or drawings. Human-in-the-Loop (HITL) mechanisms are introduced at critical nodes to ensure complete avoidance of Article 33 (modifying beyond the original scope) red-line risks.
 
 
 ## 🏗️ Architecture
@@ -47,8 +45,6 @@ M-Cube adopts a high-performance hybrid architecture of `FastAPI + React + Tauri
 * **Backend Engine**: Python 3.10+, FastAPI, Uvicorn, LangGraph, Pydantic v2, sse-starlette. 
 * **Frontend Web**: React 18, TypeScript, Vite 5, Tailwind CSS, Zustand. 
 * **Native Desktop**: Tauri 2, Rust 2021 (Supports compiling Windows `.exe` and macOS `.dmg`). 
-
----
 
 ## 🚀 Getting Started
 
