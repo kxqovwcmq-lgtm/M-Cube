@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { HitlActionPanel } from "@/components/hitl/HitlActionPanel";
 import HomeView from "@/components/home/HomeView";
@@ -168,9 +168,13 @@ function App() {
   const [comparePreview, setComparePreview] = useState<ComparePreviewState>(null);
   const [polishApplicationFile, setPolishApplicationFile] = useState<File | null>(null);
   const [polishPreview, setPolishPreview] = useState<PolishPreviewState>(null);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   const sseRef = useRef<SessionSSEConnection | null>(null);
   const pollerRef = useRef<number | null>(null);
+  const isDesktopRuntime =
+    typeof window !== "undefined" &&
+    (("__TAURI_INTERNALS__" in window) || ("__TAURI__" in window));
 
   const hasSession = useMemo(() => !!sessionId, [sessionId]);
   const hasActiveWorkflowSession = useMemo(
@@ -780,6 +784,81 @@ function App() {
     }
   }, [activeTab, status, currentStep, hasActiveWorkflowSession]);
 
+  const withCurrentWindow = useCallback(async () => {
+    if (!isDesktopRuntime) return null;
+    const mod = await import("@tauri-apps/api/window");
+    return mod.getCurrentWindow();
+  }, [isDesktopRuntime]);
+
+  const runWindowAction = useCallback(
+    async (action: (current: NonNullable<Awaited<ReturnType<typeof withCurrentWindow>>>) => Promise<void>) => {
+      try {
+        const current = await withCurrentWindow();
+        if (!current) return;
+        await action(current as NonNullable<Awaited<ReturnType<typeof withCurrentWindow>>>);
+      } catch (error) {
+        appendEvent({
+          timestamp: new Date().toISOString(),
+          type: "window_action_error",
+          payload: { message: error instanceof Error ? error.message : "window action failed" },
+        });
+      }
+    },
+    [appendEvent, withCurrentWindow],
+  );
+
+  const minimizeWindow = useCallback(async () => {
+    await runWindowAction(async (current) => {
+      await current.minimize();
+    });
+  }, [runWindowAction]);
+
+  const toggleMaximizeWindow = useCallback(async () => {
+    await runWindowAction(async (current) => {
+      await current.toggleMaximize();
+      setIsMaximized(await current.isMaximized());
+    });
+  }, [runWindowAction]);
+
+  const closeWindow = useCallback(async () => {
+    await runWindowAction(async (current) => {
+      await current.close();
+    });
+  }, [runWindowAction]);
+
+  const startWindowDrag = useCallback(
+    async (event: MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      await runWindowAction(async (current) => {
+        await current.startDragging();
+      });
+    },
+    [runWindowAction],
+  );
+
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    let mounted = true;
+    let offResized: (() => void) | null = null;
+    let offFocus: (() => void) | null = null;
+    void (async () => {
+      const current = await withCurrentWindow();
+      if (!current || !mounted) return;
+      setIsMaximized(await current.isMaximized());
+      offResized = await current.onResized(async () => {
+        setIsMaximized(await current.isMaximized());
+      });
+      offFocus = await current.onFocusChanged(async () => {
+        setIsMaximized(await current.isMaximized());
+      });
+    })();
+    return () => {
+      mounted = false;
+      offResized?.();
+      offFocus?.();
+    };
+  }, [isDesktopRuntime, withCurrentWindow]);
+
   const showWorkflowMain = activeTab !== "home" && activeTab !== "settings";
 
   const renderUploadStage = () => {
@@ -1091,10 +1170,60 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white text-gray-800">
-      <AppSidebar activeTab={activeTab} onSelect={setActiveTab} />
-      <main className="h-screen flex-1 overflow-hidden bg-white">
-        <div className="mx-auto flex h-full max-w-5xl min-h-0 flex-col">
+    <div className="flex h-screen flex-col overflow-hidden bg-white text-gray-800">
+      {isDesktopRuntime ? (
+        <header className="flex h-11 flex-shrink-0 items-center border-b border-gray-200 bg-white">
+          <div
+            className="flex min-w-0 flex-1 select-none items-center gap-2 px-3 text-gray-800"
+            data-tauri-drag-region
+            onDoubleClick={() => void toggleMaximizeWindow()}
+            onMouseDown={(event) => void startWindowDrag(event)}
+          >
+            <img alt="M-Cube" className="h-5 w-5 shrink-0" src="/icons/icon.svg" />
+            <span className="truncate text-sm font-semibold">M-Cube</span>
+          </div>
+          <div className="flex items-center pr-1">
+            <button
+              aria-label="Minimize"
+              className="inline-flex h-8 w-10 items-center justify-center rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              onClick={() => void minimizeWindow()}
+              type="button"
+            >
+              <span className="h-px w-3 bg-current" />
+            </button>
+            <button
+              aria-label={isMaximized ? "Restore" : "Maximize"}
+              className="inline-flex h-8 w-10 items-center justify-center rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              onClick={() => void toggleMaximizeWindow()}
+              type="button"
+            >
+              {isMaximized ? (
+                <span className="relative block h-3.5 w-3.5">
+                  <span className="absolute left-1 top-0.5 h-2.5 w-2.5 border border-current bg-white" />
+                  <span className="absolute left-0 top-1.5 h-2.5 w-2.5 border border-current bg-white" />
+                </span>
+              ) : (
+                <span className="block h-3 w-3 border border-current" />
+              )}
+            </button>
+            <button
+              aria-label="Close"
+              className="inline-flex h-8 w-10 items-center justify-center rounded text-gray-600 hover:bg-red-600 hover:text-white"
+              onClick={() => void closeWindow()}
+              type="button"
+            >
+              <span className="relative block h-3.5 w-3.5">
+                <span className="absolute left-0 top-1.5 h-px w-3.5 rotate-45 bg-current" />
+                <span className="absolute left-0 top-1.5 h-px w-3.5 -rotate-45 bg-current" />
+              </span>
+            </button>
+          </div>
+        </header>
+      ) : null}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <AppSidebar activeTab={activeTab} onSelect={setActiveTab} />
+        <main className="h-full flex-1 overflow-hidden bg-white">
+          <div className="mx-auto flex h-full max-w-5xl min-h-0 flex-col">
           {activeTab === "home" ? (
             <div className="flex-1 min-h-0 overflow-y-auto">
               <HomeView />
@@ -1131,6 +1260,7 @@ function App() {
           ) : null}
         </div>
       </main>
+    </div>
     </div>
   );
 }

@@ -2,16 +2,128 @@
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::process::Stdio;
 use std::sync::Mutex;
+use image as image_rs;
+use sysinfo::System;
+use tauri::image::Image;
 use tauri::{Manager, RunEvent};
 
 struct BackendProcessState(Mutex<Option<Child>>);
 
-fn append_log(log_file: &std::path::Path, msg: &str) {
+fn append_log(log_file: &Path, msg: &str) {
     if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(log_file) {
         let _ = writeln!(f, "{msg}");
+    }
+}
+
+fn set_main_window_icon(app: &tauri::App) {
+    // Force a high-resolution icon for dev mode (and keep consistent with build mode).
+    let icon_bytes = include_bytes!("../icons/icon.png");
+    if let Ok(decoded) = image_rs::load_from_memory(icon_bytes) {
+        let rgba = decoded.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let icon = Image::new_owned(rgba.into_raw(), width, height);
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_icon(icon);
+        }
+    }
+}
+
+fn resolve_log_file(app_handle: &tauri::AppHandle) -> PathBuf {
+    if let Ok(app_data_dir) = app_handle.path().app_data_dir() {
+        let log_dir = app_data_dir.join("runtime").join("logs");
+        let _ = fs::create_dir_all(&log_dir);
+        return log_dir.join("backend-sidecar.log");
+    }
+    std::env::temp_dir().join("mcube-backend-sidecar.log")
+}
+
+fn kill_sidecar_descendants_and_leftovers(root_pid: u32, process_name_marker: &str, log_file: &Path) {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let self_pid = std::process::id().to_string();
+    let root_pid_str = root_pid.to_string();
+    let marker = process_name_marker.to_lowercase();
+
+    // 1) Recursively locate descendants of the known sidecar root pid.
+    let mut frontier: Vec<String> = vec![root_pid_str.clone()];
+    let mut descendants: Vec<String> = Vec::new();
+    loop {
+        let mut discovered: Vec<String> = Vec::new();
+        for (pid, process) in sys.processes() {
+            let parent_str = process.parent().map(|p| p.to_string());
+            if let Some(parent) = parent_str {
+                let pid_str = pid.to_string();
+                if frontier.iter().any(|f| f == &parent)
+                    && pid_str != self_pid
+                    && !descendants.iter().any(|d| d == &pid_str)
+                {
+                    discovered.push(pid_str);
+                }
+            }
+        }
+        if discovered.is_empty() {
+            break;
+        }
+        frontier = discovered.clone();
+        descendants.extend(discovered);
+    }
+
+    // Kill children first (reverse BFS order).
+    for pid_str in descendants.iter().rev() {
+        for (pid, process) in sys.processes() {
+            if pid.to_string() == *pid_str {
+                let name = process.name().to_string();
+                let killed = process.kill();
+                append_log(
+                    log_file,
+                    &format!("Kill descendant pid={pid_str} name={name} result={killed}"),
+                );
+            }
+        }
+    }
+
+    // 2) Name-based fallback sweep for stubborn onefile leftovers.
+    for (pid, process) in sys.processes() {
+        let pid_str = pid.to_string();
+        if pid_str == self_pid {
+            continue;
+        }
+        let name = process.name().to_lowercase();
+        if name.contains(&marker) {
+            let killed = process.kill();
+            append_log(
+                log_file,
+                &format!("Kill fallback pid={pid_str} name={name} result={killed}"),
+            );
+        }
+    }
+}
+
+fn kill_stale_sidecars_by_name(process_name_marker: &str, log_file: &Path) {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let self_pid = std::process::id().to_string();
+    let marker = process_name_marker.to_lowercase();
+
+    for (pid, process) in sys.processes() {
+        let pid_str = pid.to_string();
+        if pid_str == self_pid {
+            continue;
+        }
+        let name = process.name().to_lowercase();
+        if name.contains(&marker) {
+            let killed = process.kill();
+            append_log(
+                log_file,
+                &format!("Startup sweep kill pid={pid_str} name={name} result={killed}"),
+            );
+        }
     }
 }
 
@@ -19,6 +131,8 @@ fn main() {
     let app = tauri::Builder::default()
         .manage(BackendProcessState(Mutex::new(None)))
         .setup(|app| {
+            set_main_window_icon(app);
+
             if cfg!(debug_assertions) {
                 // In dev mode, backend is expected to run separately (uvicorn).
                 return Ok(());
@@ -46,6 +160,7 @@ fn main() {
                 &log_file,
                 &format!("=== Launch M-Cube backend sidecar at {:?} ===", std::time::SystemTime::now()),
             );
+            kill_stale_sidecars_by_name("mcube-backend", &log_file);
 
             let resource_dir = app_handle
                 .path()
@@ -124,13 +239,21 @@ fn main() {
 
     app.run(|app_handle, event| {
         if matches!(event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {
+            let log_file = resolve_log_file(&app_handle);
             let state = app_handle.state::<BackendProcessState>();
             let child_to_kill = match state.0.lock() {
                 Ok(mut guard) => guard.take(),
                 Err(_) => None,
             };
             if let Some(mut child) = child_to_kill {
+                let root_pid = child.id();
                 let _ = child.kill();
+                append_log(
+                    &log_file,
+                    &format!("Primary sidecar kill sent. root_pid={root_pid}"),
+                );
+                kill_sidecar_descendants_and_leftovers(root_pid, "mcube-backend", &log_file);
+                append_log(&log_file, "Sidecar cleanup completed.");
             }
         }
     });

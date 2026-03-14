@@ -8,19 +8,6 @@
 
 M-Cube is a multi-thinking, multimodal, and multi-verification multi-agent collaborative patent drafting assistant. It relies on LangGraph for multi-agent orchestration, introducing multiple AI Agents to conduct multi-step reasoning. At different stages, it accomplishes various functions—including patent drafting, Office Action (OA) responses, prior art comparison, and claim polishing—based on the multimodal information of patent text and drawings. Throughout the process, it incorporates multiple verifications, such as specification support checks and prior art text-to-image logical verifications, ultimately outputting patent documents with self-consistent technical solutions, robust claims, and mutually corroborating drawings and text.
 
-## 💼 Workflows
-
-The workflows of M-Cube are illustrated below:
-
-![M-Cube Workflows](docs/images/workflow.png)
-
-M-Cube deeply abstracts the core working scenarios of patent attorneys, providing four industrial-grade workflows:
-
-1. 📝 **Patent Drafting**: Performs atomic-level feature breakdown and drawing analysis based on technical disclosures. It drafts claims and specifications through multi-agent collaboration, providing traceability checks and logical reviews against the disclosure.
-2. ⚔️ **Office Action (OA) Response**: Deeply parses official examination opinions and analyzes the current case against prior art. It determines modification strategies based on the OA, mines fallback features from the specification, conducts feature verification, and ultimately generates the arguments and A33-compliant replacement sheets.
-3. 🔍 **Prior Art Comparison**: Analyzes the text and drawings of the current case and prior art documents. It compares features and connection relationships, outputting novelty/inventive step risk grading and subsequent modification suggestions.
-4. ✨ **Claim Polishing**: Reconstructs the application document, troubleshooting formal defects in the claims such as unclear preambles, lack of antecedent basis, and non-technical features. It also conducts a logical review of the modified documents.
-
 ## ✨ Core Features
 
 M-Cube's technical moat is built upon three core features:
@@ -36,6 +23,19 @@ M-Cube's technical moat is built upon three core features:
 * 🛡️ **Multi-verification**
 
   Built-in multiple legal compliance audits and anti-hallucination verifications. All output features must have concrete anchors in the technical disclosure or drawings. Human-in-the-Loop (HITL) mechanisms are introduced at critical nodes to ensure complete avoidance of Article 33 (modifying beyond the original scope) red-line risks.
+
+## 💼 Workflows
+
+The workflows of M-Cube are illustrated below:
+
+![M-Cube Workflows](docs/images/workflow.png)
+
+M-Cube deeply abstracts the core working scenarios of patent attorneys, providing four industrial-grade workflows:
+
+1. 📝 **Patent Drafting**: Performs atomic-level feature breakdown and drawing analysis based on technical disclosures. It drafts claims and specifications through multi-agent collaboration, providing traceability checks and logical reviews against the disclosure.
+2. ⚔️ **Office Action (OA) Response**: Deeply parses official examination opinions and analyzes the current case against prior art. It determines modification strategies based on the OA, mines fallback features from the specification, conducts feature verification, and ultimately generates the arguments and A33-compliant replacement sheets.
+3. 🔍 **Prior Art Comparison**: Analyzes the text and drawings of the current case and prior art documents. It compares features and connection relationships, outputting novelty/inventive step risk grading and subsequent modification suggestions.
+4. ✨ **Claim Polishing**: Reconstructs the application document, troubleshooting formal defects in the claims such as unclear preambles, lack of antecedent basis, and non-technical features. It also conducts a logical review of the modified documents.
 
 
 ## 🏗️ Architecture
@@ -69,9 +69,40 @@ macOS/Linux:
 cp .env.example .env
 ```
 
-Please fill in at least one available model API Key (e.g., `OPENAI_API_KEY`, `DASHSCOPE_API_KEY`) in the `.env` file.
+Please fill in at least one available model API Key (e.g., `OPENAI_API_KEY`, `DASHSCOPE_API_KEY`) in the `.env` file. Now you can choose the option that works best for you:
 
-### 1. Local Web Development
+### 1. Docker Deployment
+
+Prerequisites:
+
+- Docker installed and running.
+- Prepare the `.env` file in the project root directory and fill in the model API Keys as needed.
+
+Start:
+
+```bash
+docker compose up --build
+```
+
+Access:
+
+- Frontend: `http://127.0.0.1:1420`
+- Backend: `http://127.0.0.1:8000`
+
+View Logs:
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+### 2. Local Web Development
 
 **Terminal 1 (Start Backend Engine)**:
 
@@ -92,7 +123,7 @@ npm --prefix frontend run dev
 - Frontend UI: `http://localhost:1420`
 - Backend API: `http://127.0.0.1:8000`
 
-### 2. Native Desktop Development (Tauri)
+### 3. Desktop Development (Tauri)
 
 Note: The `tauri:dev` command only launches the native desktop shell and will not automatically start the Python backend. Please ensure the backend service is running first according to Step 1 (Terminal 1).
 
@@ -101,7 +132,7 @@ npm install --prefix frontend
 npm --prefix frontend run tauri:dev
 ```
 
-### 3. Build Local Desktop App
+### 4. Local Desktop App
 
 ```bash
 npm --prefix frontend run tauri:build
@@ -110,34 +141,6 @@ npm --prefix frontend run tauri:build
 Note: If you encounter a missing PyInstaller error during local building, you can run:
 ```bash
 pip install pyinstaller
-```
-
-### 4. Docker Deployment
-
-Prerequisites:
-
-- Docker installed and running.
-- Prepare the `.env` file in the project root directory and fill in the model API Keys as needed.
-
-Start:
-```bash
-docker compose up --build
-```
-
-Access:
-
-- Frontend: `http://127.0.0.1:1420`
-- Backend: `http://127.0.0.1:8000`
-
-View Logs:
-```bash
-docker compose logs -f backend
-docker compose logs -f frontend
-```
-
-Stop:
-```bash
-docker compose down
 ```
 
 ## 📄 License
