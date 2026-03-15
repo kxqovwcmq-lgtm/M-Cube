@@ -1,4 +1,4 @@
-﻿# <img src="frontend/src-tauri/icons/icon.png" alt="M-Cube Icon" width="45" align="center" style="margin-right: 8px;" /> M-Cube (M³) — Multi-thinking, Multimodal, Multi-verification Patent Drafting Assistant
+# <img src="frontend/src-tauri/icons/icon.png" alt="M-Cube Icon" width="45" align="center" style="margin-right: 8px;" /> M-Cube (M³) — Multi-thinking, Multimodal, Multi-verification Patent Drafting Assistant
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Backend: FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -10,7 +10,7 @@ M-Cube is a multi-thinking, multimodal, and multi-verification multi-agent colla
 
 ## ✨ Core Features
 
-M-Cube's technical moat is built upon three core features:
+M-Cube has three core features:
 
 * 🧠 **Multi-thinking**
 
@@ -40,11 +40,11 @@ M-Cube deeply abstracts the core working scenarios of patent attorneys, providin
 
 ## 🏗️ Architecture
 
-M-Cube adopts a high-performance hybrid architecture of `FastAPI + React + Tauri`, supporting both cloud SaaS deployment and local geek-style offline execution. 
+M-Cube adopts a high-performance hybrid architecture of `FastAPI + React + Tauri`, supporting both cloud SaaS deployment and local geek-style offline execution.
 
 * **Backend Engine**: Python 3.10+, FastAPI, Uvicorn, LangGraph, Pydantic v2, sse-starlette. 
 * **Frontend Web**: React 18, TypeScript, Vite 5, Tailwind CSS, Zustand. 
-* **Native Desktop**: Tauri 2, Rust 2021 (Supports compiling Windows `.exe` and macOS `.dmg`). 
+* **Native Desktop**: Tauri 2, Rust 2021. 
 
 ## 🚀 Getting Started
 

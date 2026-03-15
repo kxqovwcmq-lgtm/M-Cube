@@ -127,45 +127,27 @@ def _extract_examiner_opinion_text(notice_text: str, *, notice_pages: list[str] 
     Extract the substantive examiner-opinion section from an OA notice.
     Returns (extracted_text, used_extraction).
     """
+    import re
+
     text = (notice_text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         return "", False
 
-    import re
-
-    # Normal Chinese + mojibake variants from CI fixtures.
     signature_markers = (
         "审查员姓名",
         "审查员代码",
         "审查员：",
         "审查员:",
-        "瀹℃煡鍛樺鍚",
-        "瀹℃煡鍛樹唬鐮",
-        "瀹℃煡鍛樺鍚嶏細",
-        "瀹℃煡鍛樹唬鐮侊細",
-    )
-
-
-def _is_doc_image_dependency_error(message: str) -> bool:
-    msg = (message or "").lower()
-    return (
-        "failed to parse doc images" in msg
-        and ("microsoft word" in msg or "libreoffice" in msg or "soffice" in msg or "pywin32" in msg)
     )
     retrieval_markers = (
         "检索报告",
         "检索式",
         "引用文件",
-        "妫€绱㈡姤鍛",
-        "妫€绱㈠紡",
-        "寮曠敤鏂囦欢",
     )
     opinion_heading_markers = (
         "审查员具体意见",
         "审查员认为",
         "具体意见",
-        "瀹℃煡鍛樺叿浣撴剰瑙",
-        "瀹℃煡鍛樿涓",
     )
 
     def _cut_at_earliest(source: str, markers: tuple[str, ...], *, from_pos: int = 0) -> int:
@@ -184,11 +166,8 @@ def _is_doc_image_dependency_error(message: str) -> bool:
         if len(candidate) >= 20:
             return candidate, True
 
-    # Strategy 2: start from the second "审查意见通知书" title block if present.
-    issue_title_pattern = re.compile(
-        r"(第\s*\d+\s*次审查意见通知书|绗.\s*\d+\s*娆.*?閫氱煡涔)",
-        flags=re.IGNORECASE,
-    )
+    # Strategy 2: start from the second OA notice title block if present.
+    issue_title_pattern = re.compile(r"第\s*\d+\s*次审查意见通知书", flags=re.IGNORECASE)
     issue_matches = list(issue_title_pattern.finditer(text))
     if len(issue_matches) >= 2:
         start_pos = issue_matches[1].end()
@@ -211,9 +190,18 @@ def _is_doc_image_dependency_error(message: str) -> bool:
 
     return text, False
 
+
+def _is_doc_image_dependency_error(message: str) -> bool:
+    msg = (message or "").lower()
+    return (
+        "failed to parse doc images" in msg
+        and ("microsoft word" in msg or "libreoffice" in msg or "soffice" in msg or "pywin32" in msg)
+    )
+
+
 def _extract_original_claims_text(application_text: str) -> tuple[str, bool, str]:
     """
-    Extract the 'Ȩ��Ҫ����' section from uploaded application text.
+    Extract the "Claims" section from uploaded application text.
     Returns (claims_text, extracted, strategy).
     """
     text = (application_text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -223,12 +211,17 @@ def _extract_original_claims_text(application_text: str) -> tuple[str, bool, str
     import re
 
     # Strategy 1: explicit section heading range.
-    start_pattern = re.compile(r"(?:^|\n)\s*Ȩ��Ҫ����\s*(?:\n|$)")
+    start_pattern = re.compile(r"(?:^|\n)\s*\u6743\u5229\u8981\u6c42\u4e66\s*(?:\n|$)")
     start_match = start_pattern.search(text)
     if start_match is not None:
         start_pos = start_match.end()
         # Typical following sections after claims.
-        end_pattern = re.compile(r"(?:^|\n)\s*(˵����(?:ժҪ)?|ժҪ|��������|��������|��������|��ͼ˵��|����ʵʩ��ʽ)\s*(?:\n|$)")
+        end_pattern = re.compile(
+            r"(?:^|\n)\s*(\u8bf4\u660e\u4e66(?:\u6458\u8981)?|\u6458\u8981|"
+            r"\u6280\u672f\u9886\u57df|\u80cc\u666f\u6280\u672f|"
+            r"\u53d1\u660e\u5185\u5bb9|\u9644\u56fe\u8bf4\u660e|"
+            r"\u5177\u4f53\u5b9e\u65bd\u65b9\u5f0f)\s*(?:\n|$)"
+        )
         end_match = end_pattern.search(text, start_pos)
         claims_body = text[start_pos : end_match.start() if end_match else len(text)].strip()
         if len(claims_body) >= 20:
@@ -236,7 +229,7 @@ def _extract_original_claims_text(application_text: str) -> tuple[str, bool, str
 
     # Strategy 2: claim-like numbered lines.
     lines = [line.strip() for line in text.split("\n")]
-    claim_line_pattern = re.compile(r"^(Ȩ��Ҫ��\s*\d+|[1-9]\d{0,2}[��.��])")
+    claim_line_pattern = re.compile(r"^(\u6743\u5229\u8981\u6c42\s*\d+|[1-9]\d{0,2}[\u3001.\uff0e])")
     start_idx: int | None = None
     for idx, line in enumerate(lines):
         if claim_line_pattern.match(line):
@@ -244,7 +237,16 @@ def _extract_original_claims_text(application_text: str) -> tuple[str, bool, str
             break
     if start_idx is not None:
         collected: list[str] = []
-        stop_headings = {"˵����", "˵����ժҪ", "ժҪ", "��������", "��������", "��������", "��ͼ˵��", "����ʵʩ��ʽ"}
+        stop_headings = {
+            "\u8bf4\u660e\u4e66",
+            "\u8bf4\u660e\u4e66\u6458\u8981",
+            "\u6458\u8981",
+            "\u6280\u672f\u9886\u57df",
+            "\u80cc\u666f\u6280\u672f",
+            "\u53d1\u660e\u5185\u5bb9",
+            "\u9644\u56fe\u8bf4\u660e",
+            "\u5177\u4f53\u5b9e\u65bd\u65b9\u5f0f",
+        }
         for line in lines[start_idx:]:
             if line in stop_headings:
                 break
@@ -258,7 +260,7 @@ def _extract_original_claims_text(application_text: str) -> tuple[str, bool, str
 
 def _extract_application_specification_text(application_text: str) -> tuple[str, bool, str]:
     """
-    Extract the '˵����' section from uploaded application text.
+    Extract the "Specification" section from uploaded application text.
     Returns (spec_text, extracted, strategy).
     """
     text = (application_text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -267,8 +269,8 @@ def _extract_application_specification_text(application_text: str) -> tuple[str,
 
     import re
 
-    # Strategy 1: explicit "˵����" heading to end.
-    start_pattern = re.compile(r"(?:^|\n)\s*˵����\s*(?:\n|$)")
+    # Strategy 1: explicit specification heading to end.
+    start_pattern = re.compile(r"(?:^|\n)\s*\u8bf4\u660e\u4e66\s*(?:\n|$)")
     start_match = start_pattern.search(text)
     if start_match is not None:
         candidate = text[start_match.end() :].strip()
@@ -276,7 +278,11 @@ def _extract_application_specification_text(application_text: str) -> tuple[str,
             return candidate, True, "heading_range"
 
     # Strategy 2: start from first specification chapter heading.
-    start_pattern_2 = re.compile(r"(?:^|\n)\s*(��������|��������|��������|��ͼ˵��|����ʵʩ��ʽ)\s*(?:\n|$)")
+    start_pattern_2 = re.compile(
+        r"(?:^|\n)\s*(\u6280\u672f\u9886\u57df|\u80cc\u666f\u6280\u672f|"
+        r"\u53d1\u660e\u5185\u5bb9|\u9644\u56fe\u8bf4\u660e|"
+        r"\u5177\u4f53\u5b9e\u65bd\u65b9\u5f0f)\s*(?:\n|$)"
+    )
     start_match_2 = start_pattern_2.search(text)
     if start_match_2 is not None:
         candidate = text[start_match_2.start() :].strip()
@@ -284,49 +290,13 @@ def _extract_application_specification_text(application_text: str) -> tuple[str,
             return candidate, True, "chapter_heading_range"
 
     # Strategy 3: if claims heading exists, use content after claims section.
-    claims_heading = re.search(r"(?:^|\n)\s*Ȩ��Ҫ����\s*(?:\n|$)", text)
+    claims_heading = re.search(r"(?:^|\n)\s*\u6743\u5229\u8981\u6c42\u4e66\s*(?:\n|$)", text)
     if claims_heading is not None:
         candidate = text[claims_heading.end() :].strip()
         if len(candidate) >= 40:
             return candidate, True, "after_claims_heading"
 
     return text, False, "fallback_full_text"
-
-
-def _parse_uploaded_pdf_pages(file_id: str, store: InMemoryFileStore) -> list[str]:
-    """
-    Return per-page text for uploaded PDF. Non-PDF files return [].
-    """
-    record = store.get(file_id)
-    if record is None:
-        raise ApiError(
-            http_status=404,
-            code="E404_FILE_NOT_FOUND",
-            message="Uploaded file not found.",
-            session_id="unknown",
-            details={"file_id": file_id},
-        )
-    if not record.filename.lower().endswith(".pdf"):
-        return []
-
-    try:
-        doc = fitz.open(record.path)
-    except Exception as exc:  # noqa: BLE001
-        raise ApiError(
-            http_status=400,
-            code="E400_INVALID_INPUT",
-            message=f"Failed to read uploaded PDF: {exc}",
-            session_id="unknown",
-            details={"file_id": file_id, "filename": record.filename},
-            retryable=False,
-        ) from exc
-    try:
-        pages: list[str] = []
-        for page_index in range(doc.page_count):
-            pages.append(doc.load_page(page_index).get_text("text").strip())
-        return pages
-    finally:
-        doc.close()
 
 
 def get_session_store() -> InMemorySessionStore:
@@ -346,759 +316,407 @@ def _make_stub_llm_callable(payload: Any):
     return _call
 
 
-_DRAFT_STUBS = {
-    "extract_tech": {
-        "source_quotes": [
-            "���з��������ӹ������ȶ��Բ�����ά���ɱ�������",
-            "ͨ���༶������״̬��������Эͬ���ڹؼ�ִ�е�Ԫ��",
-            "�÷�����������ϵͳ�ȶ���������Ͳ�����",
-        ],
-        "background_and_core_problems": [
-            "���ӹ��������ƾ������ȶ��Բ��㡣",
-            "�������в������¿ɿ����½���",
-            "ϵͳά���ɱ������˹���ԤƵ����",
-        ],
-        "core_solution_overview": "ͨ��������Ԫ��ִ�е�Ԫ��Эͬ����ģ�鹹���ջ�������ϵ������״̬�ɼ������̬���������ִ�в�����ʵ�ָ��ӹ����µ��ȶ����������ά��������",
-        "detailed_features": [
-            {
-                "feature_name": "������Ԫ",
-                "detailed_structure_or_step": "ʵʱ�ɼ�����״̬����Эͬ����ģ�鴫��״̬�źš�",
-                "solved_sub_problem": "�޷���ʱ��֪�����仯���µ����ͺ�",
-                "specific_effect": "���״̬��֪��ʱ�ԣ�Ϊ�ջ������ṩ���ݡ�",
-            },
-            {
-                "feature_name": "Эͬ����ģ��",
-                "detailed_structure_or_step": "���������źż���������������·���ִ�е�Ԫ��",
-                "solved_sub_problem": "��ִ�е�Ԫ������һ�����ϵͳ�񵴡�",
-                "specific_effect": "����ϵͳ����������Эͬһ���ԡ�",
-            },
-            {
-                "feature_name": "ִ�е�Ԫ��̬����",
-                "detailed_structure_or_step": "��������Ĳ���ִ�����ƶ�������������γɱջ���",
-                "solved_sub_problem": "�������й������������������������Լ�ʱ������",
-                "specific_effect": "���Ƴ����ȶ��Բ�����ά����Ԥ��",
-            },
-        ],
-        "overall_advantages": ["��������ȶ���", "����ά���ɱ�", "��ǿ���ӹ�����Ӧ��"],
-    },
-    "draft_claims": {
-        "claims": [
-            {
-                "claim_number": 1,
-                "claim_type": "independent",
-                "depends_on": [],
-                "preamble": "һ�ֶ༶����ϵͳ",
-                "transition": "���������ڣ�������",
-                "elements": [
-                    "һ��������Ԫ�����ڲɼ�ϵͳ����״̬����",
-                    "һ��ִ�е�Ԫ�����ڸ��ݿ��Ʋ���ִ�е��ڶ���",
-                    "һ��Эͬ����ģ�飬���ڻ���״̬������̬��������ִ�е�Ԫ�Ŀ��Ʋ���",
-                ],
-                "full_text": "һ�ֶ༶����ϵͳ�����������ڣ�������һ��������Ԫ�����ڲɼ�ϵͳ����״̬���ݣ�һ��ִ�е�Ԫ�����ڸ��ݿ��Ʋ���ִ�е��ڶ�����һ��Эͬ����ģ�飬���ڻ���״̬������̬��������ִ�е�Ԫ�Ŀ��Ʋ�����",
-            },
-            {
-                "claim_number": 2,
-                "claim_type": "dependent",
-                "depends_on": [1],
-                "preamble": "����Ȩ��Ҫ��1�����Ķ༶����ϵͳ",
-                "transition": "������������",
-                "elements": [
-                    "����������Ԫ�������вɼ�ģ����쳣���ģ��",
-                    "�����쳣���ģ��������״̬��������ֵʱ������������",
-                ],
-                "full_text": "����Ȩ��Ҫ��1�����Ķ༶����ϵͳ�����������ڣ�����������Ԫ�������вɼ�ģ����쳣���ģ�飻�����쳣���ģ��������״̬��������ֵʱ��������������",
-            },
-        ],
-    },
-    "revise_claims": {
-        "claims": [
-            {
-                "claim_number": 1,
-                "claim_type": "independent",
-                "depends_on": [],
-                "preamble": "һ�ֶ༶����ϵͳ",
-                "transition": "���������ڣ�������",
-                "elements": [
-                    "һ��������Ԫ�����ڲɼ�ϵͳ����״̬����",
-                    "һ��ִ�е�Ԫ�����ڸ��ݿ��Ʋ���ִ�е��ڶ���",
-                ],
-                "full_text": "һ�ֶ༶����ϵͳ�����������ڣ�������һ��������Ԫ�����ڲɼ�ϵͳ����״̬���ݣ�һ��ִ�е�Ԫ�����ڸ��ݿ��Ʋ���ִ�е��ڶ�����",
-            }
-        ],
-    },
-    "write_spec": {
-        "title": "һ�ֶ༶����ϵͳ",
-        "technical_field": "�������漰�Զ������빤ҵϵͳ�Ż����Ƽ�������",
-        "background_art": "���м����ڸ��ӹ�ҵ������ͨ�����ù̶��������Ʋ��ԣ����Ը���ʵʱ״̬�仯���ж�̬���ڣ�����ϵͳ���������"
-        "ִ�е�ԪЭͬ�����Լ�ά����ԤƵ����ͬʱ����ͳ�������쳣״̬��Ӧ�ͺ�������������������������ά���ȶ�����ɿ��ԣ�"
-        "������ά�ɱ��ϸߣ��޷�����߿��ó����Ĺ�������",
-        "invention_content": {
-            "technical_problem": "������п���ϵͳ�ڸ��ӹ������ȶ��Բ��㡢�쳣��Ӧ����ʱ��ִ�е�ԪЭͬ������������ά���ɱ��ϸߵ����⣬"
-            "���������һ�ֿɱջ���̬�����Ķ༶����ϵͳ��",
-            "technical_solution": "�������ṩһ�ֶ༶����ϵͳ��ϵͳ����������Ԫ��ִ�е�Ԫ��Эͬ����ģ�顣������Ԫ����ʵʱ�ɼ�����״̬�������쳣�ж���"
-            "ִ�е�Ԫ�������ݿ��Ʋ���ִ�ж�����Эͬ����ģ�����ڻ��ڷ��������ִ�в������ж�̬����������������·���ִ�е�Ԫ��"
-            "����⵽״̬����������ֵʱ��ϵͳ�����������������̣�ͨ���ջ���������ʵ�ֶ��������Ʊ����ĳ��������������Ӷ����๤��������"
-            "ά���ȶ����������ϵͳ�񵴡�",
-            "beneficial_effects": "ͨ��������ִ����Эͬ�������߱ջ��������������ܹ���������ϵͳ���Ŷ������µ���̬����������"
-            "ͨ���쳣�����µĲ�����̬�������ƣ����������쳣��Ӧ��ʱ�Բ��������������ͨ���༶ִ�е�ԪЭͬ���ƣ�"
-            "�ܹ����ͳ������в����������˹�ά��Ƶ�Σ���������������ά�ɱ�������ϵͳ�ɿ��ԡ�",
-        },
-        "drawings_description": "ͼ1Ϊϵͳ����ṹʾ��ͼ��ͼ2Ϊ��������ʾ��ͼ��",
-        "detailed_implementation": {
-            "introductory_boilerplate": "Ϊ��ʹ��������Ŀ�ġ���������������Ч�����������ȷ�������ϸ�ͼ�;���ʵʩ��ʽ�Ա���������һ����ϸ˵����",
-            "overall_architecture": "���ͼ1��ͼ2����ʵʩ���Ķ༶����ϵͳ�ɷ�����Ԫ��ִ�е�Ԫ��Эͬ����ģ�鹹�ɱջ����Ƽܹ���"
-            "������Ԫ�����ɼ��¶ȡ�ѹ����λ�Ƶ�����״̬�����γ�״̬������Эͬ����ģ�����״̬�������������������"
-            "ִ�е�Ԫ���ݸ��º�Ŀ��Ʋ���ʵʩ��������ִ�н���ش��������ˣ��γ�ȫ���̱ջ��������ơ�",
-            "component_details": [
-                {
-                    "feature_name": "������Ԫ10",
-                    "structure_and_connection": "������Ԫ10�������вɼ���ģ����쳣�����ģ�飬���вɼ���ģ����ִ�е�Ԫ20�ź����ӣ�"
-                    "����ʵʱ����ִ��״̬���ݣ��쳣�����ģ����Эͬ����ģ��30�������ӣ���������쳣��ʶ��״̬���������",
-                    "working_principle": "������Ԫ10ͨ��������������ֵ�ж�����ʶ��ϵͳƫ��״̬������ƫ����Ϣ������Эͬ����ģ��30��"
-                    "Ϊ���������ṩ�������ݡ�",
-                },
-                {
-                    "feature_name": "ִ�е�Ԫ20",
-                    "structure_and_connection": "ִ�е�Ԫ20��Эͬ����ģ��30�������ӣ����뷴����Ԫ10�γ�״̬������·��"
-                    "ִ�е�Ԫ20�ɰ�����������ִ�л�����״̬�ر���Ԫ�������ڰ����Ʋ�����ɶ��������",
-                    "working_principle": "ִ�е�Ԫ20��������������ʵʩ���ƶ������������������״̬�仯����������Ԫ10��"
-                    "��֧����һ���ڵıջ�У����",
-                },
-                {
-                    "feature_name": "Эͬ����ģ��30",
-                    "structure_and_connection": "Эͬ����ģ��30�ֱ��뷴����Ԫ10��ִ�е�Ԫ20���ӣ�������������������ģ���������л���ģ�飬"
-                    "�������ݷ���״̬���������������·�ִ�С�",
-                    "working_principle": "Эͬ����ģ��30����ƫ�������쳣��ʶ��̬ѡ����ڲ��ԣ����������������������벹����"
-                    "�Ӷ�����ϵͳ�񵴲���������Эͬ���ܡ�",
-                },
-            ],
-            "workflow_description": "ϵͳ����������ɷ�����Ԫ10�ɼ���ʼ״̬���ݲ��������ߣ����ִ�е�Ԫ20����ʼ�������в������ϱ�״̬��"
-            "��������Ԫ10��⵽ƫ���ʱ��Эͬ����ģ��30���������������̣������µ����Ʋ������·���ִ�е�Ԫ20��"
-            "ִ�е�Ԫ20���ո��²���ִ�к��ٴλش�״̬��ϵͳ�ظ���������ֱ��ƫ��������Ԥ�跶Χ������ʵ���ȶ����С�",
-            "alternative_embodiments": "�������뱾�������Ĺ�˼��ǰ���£�������Ԫ10�еļ���㷨���滻Ϊ�����򳣹��쳣ʶ���㷨��"
-            "ִ�е�Ԫ20�ɲ��õ�Ч�����ṹ��Эͬ����ģ��30�Ĳ������㷽��Ҳ���ɱ���������Ա���ݾ��峡�����г����滻���Ч�任��",
-        },
-    },
-    "traceability": {
-        "reports": [
-            {
-                "claim_number": 1,
-                "elements_evidence": [
-                    {
-                        "feature_text": "����һ��������Ԫ",
-                        "verbatim_quote": "ϵͳ����������Ԫ��ִ�е�Ԫ��Эͬ����ģ�顣",
-                        "support_level": "Explicit",
-                        "reasoning": "������ԭ����ȷ�����˷�����Ԫ��",
-                    },
-                    {
-                        "feature_text": "����һ��ִ�е�Ԫ",
-                        "verbatim_quote": "ϵͳ����������Ԫ��ִ�е�Ԫ��Эͬ����ģ�顣",
-                        "support_level": "Explicit",
-                        "reasoning": "������ԭ����ȷ������ִ�е�Ԫ��",
-                    },
-                    {
-                        "feature_text": "����һ��Эͬ����ģ��",
-                        "verbatim_quote": "ϵͳ����������Ԫ��ִ�е�Ԫ��Эͬ����ģ�顣",
-                        "support_level": "Explicit",
-                        "reasoning": "������ԭ����ȷ������Эͬ����ģ�顣",
-                    },
-                ],
-                "is_fully_supported": True,
-            }
-        ],
-        "overall_risk_assessment": "��ǰȨ��Ҫ������������������������ҵ���ȷ֧�֣�������տ����������˹����������ǡ�",
-    },
-    "logic_review": {
-        "issues": [],
-    },
-    "drawing_map": {
-        "figures": [],
-        "overall_notes": "No drawing analysis available in stub mode.",
-        "warnings": ["stub_mode_no_vision"],
-    },
-}
-
-_OA_STUBS = {
-    "oa_parser": {
-        "defects": [
-            {
-                "defect_type": "ȱ��������",
-                "rejected_claims": [1],
-                "main_cited_docs": ["D1", "D2"],
-                "feature_mappings": [
-                    {
-                        "target_feature": "Ȩ��Ҫ��1�е�׶̨���ɽṹ",
-                        "prior_art_doc": "D1",
-                        "cited_paragraphs": "[0032]",
-                        "cited_figures": "ͼ2����10",
-                        "examiner_logic": "���Ա��ΪD1ͼ2����10�ɵ�ͬ������׶̨���ɽṹ��",
-                    }
-                ],
-                "combination_motivation": "D2�����ṹ�滻��ʾ����������ȶ��ԡ�",
-            }
-        ],
-        "overall_summary": "���Ա��������ΪȨ��Ҫ��1�����D1+D2���߱������ԡ�",
-    },
-    "multimodal_prior_art": {
-        "supporting_items": [
-            {
-                "target_feature": "Ȩ��Ҫ��1�е����ӽṹ����",
-                "prior_art_text_disclosure": "D1 ����[0032]���������Ӽ�������ĳ������ӷ�ʽ��",
-                "prior_art_visual_disclosure": "D1 ͼ2��ʾ����10���������������������Բ��״���˲�������γɸ����������ӡ�",
-                "amendment_avoidance_warning": "�޸�ʱ������ʹ�ÿ��������/���ӡ�������Ӧ������������ֹ�򼸺�������",
-            }
-        ],
-        "disputable_items": [
-            {
-                "target_feature": "Ȩ��Ҫ��1�е�׶̨���ɽṹ",
-                "examiner_assertion": "���Ա��ΪD1ͼ2����10��Ӧ����׶̨���ɽṹ��",
-                "multimodal_reality_check": "ͼ2����10����Ϊ�Ⱦ�Բ������׶̨����������Ҳ����Ӧ���ɶΡ�",
-                "rebuttal_angle": "�ɴӼ������������ӹ����������룬��֤�Ա��ļ�δ�����ù��ɽṹ��",
-            }
-        ],
-        "examiner_conclusion_supported": True,
-        "confidence": "High",
-        "overall_conclusion": "��� OA ���ö����븽ͼ�Ķ��������ʾ������һ������������������ռ䡣",
-    },
-    "application_baseline": {
-        "claims_tree": [
-            {
-                "claim_number": 1,
-                "claim_type": "independent",
-                "depends_on": [],
-                "features": [
-                    {"feature_id": "1A", "feature_text": "����������ֵ����Ӧģ��"},
-                    {"feature_id": "1B", "feature_text": "����Эͬ����ģ��"},
-                    {"feature_id": "1C", "feature_text": "����ִ�н���ش��ջ�"},
-                ],
-            },
-            {
-                "claim_number": 2,
-                "claim_type": "dependent",
-                "depends_on": [1],
-                "features": [{"feature_id": "2A", "feature_text": "��ֵ���䶯̬�ر궨"}],
-            },
-        ],
-        "spec_feature_index": [
-            {
-                "component_or_step_name": "��ֵ�ر궨��Ԫ",
-                "reference_numeral": "10",
-                "detailed_description": "��������ͬ�����¶�̬������ֵ���䲢������²�����",
-                "alternative_embodiments": "�ɲ��÷ֶκ��������ʽʵ�֡�",
-                "source_paragraph": "˵�����[0041]��",
-            },
-            {
-                "component_or_step_name": "����У׼����",
-                "reference_numeral": "��",
-                "detailed_description": "���쳣������ִ�ж���У׼������ƫ��ָ��ȶ������",
-                "alternative_embodiments": "��",
-                "source_paragraph": "˵������[0046]��",
-            },
-        ],
-        "claim_tree_overview": "Ȩ��Ҫ��1Ϊ����Ȩ��Ҫ��Ȩ��Ҫ��2-4�ֱ��޶�������ֵ���ԡ�Эͬ����·����ִ�лش��߼���",
-        "normalized_claim_features": ["������ֵ����Ӧ", "Эͬ����ģ��", "ִ�н���ش��ջ�"],
-        "fallback_features": ["��ֵ���䶯̬���궨", "�쳣���������У׼����"],
-        "specification_feature_index": ["˵�����[0041]�Σ���ֵ��̬�ر궨", "˵�����[0046]�Σ�����У׼����"],
-    },
-    "concession_gap": {
-        "overall_strategy_summary": "���Ƚ�������Ȩ��Ҫ����Ȩ��Ҫ��1�����Բ��㣬����ָ������˵�����������",
-        "claim_assessments": [
-            {
-                "claim_number": 1,
-                "status": "DEFEATED",
-                "reasoning": "D1+D2��Ȩ��Ҫ��1���Ĺ����γɸ��ǣ���ǰ����Ȩ��Ҫ����ʧ�ء�",
-            },
-            {
-                "claim_number": 3,
-                "status": "MERGE_CANDIDATE",
-                "reasoning": "Ȩ��Ҫ��3�ĵ��ɿ����޶������жԱ��ļ���δ����ȷ����������Ϊ���Ⱥϲ�����",
-            },
-        ],
-        "recommended_merges": [3],
-        "mining_directives": [
-            {
-                "target_component_or_step": "������ֹ�ṹ",
-                "technical_gap_to_fill": "�貹��Ա��ļ�δ�����ľ�����ֹ����������Լ��ϸ�ڡ�",
-                "avoidance_warning": "����ʹ�ÿ�������������D1�Ѹ���һ�㵯�����ӡ�",
-            }
-        ],
-        "failed_claims": [1],
-        "confirmed_points": ["D1+D2 �Ե�ǰȨ��Ҫ��1�Ļ������ɾ��н�ǿ���ǡ�"],
-        "gap_targets": ["���ӽṹ��ϸ������", "�����������⹹��", "����ȶ���������Ľṹ����"],
-        "rationale": "��ǰȨ��Ҫ�󱣻���Χƫ�������˵������������δ��Ȩ��ϸ�������Խ����µ����ֵ㡣",
-    },
-    "fallback_feature_mining": {
-        "mining_status": "SUCCESS",
-        "candidates": [
-            {
-                "candidate_id": "Candidate_A",
-                "addressed_directive": "������ֹ�ṹ",
-                "feature_name": "�����������ù轺����Ȧ",
-                "reference_numeral": "15",
-                "verbatim_quote": "��һʵʩ���У������������û��ι轺�ܷ�Ȧ�������ܷ����ܡ�",
-                "source_location": "˵�������[0048]",
-                "gap_filling_rationale": "�����������ܷ��ȶ��ԣ����ܿ��˿���������ӵ�������",
-            },
-            {
-                "candidate_id": "Candidate_B",
-                "addressed_directive": "������ֹ�ṹ",
-                "feature_name": "����ײ����÷�������",
-                "reference_numeral": "��",
-                "verbatim_quote": "����ײ����γɷ������ƽṹ��������߷����ȶ��ԡ�",
-                "source_location": "˵�������[0052]",
-                "gap_filling_rationale": "�����������ȹ����������Ҳ����뵯�����ӹ�����Χ��",
-            },
-            {
-                "candidate_id": "Candidate_C",
-                "addressed_directive": "������ֹ�ṹ",
-                "feature_name": "�����뱭����ô����ɵĿ������",
-                "reference_numeral": "20",
-                "verbatim_quote": "���۲����õ��Լ����ڱպ�ʱ�ṩ�ص���ֹ����",
-                "source_location": "˵�������[0058]��ͼ3",
-                "gap_filling_rationale": "������ֱ��������ֹ����ȱ����������Ϊ�����ѡ���к���ѹ�⡣",
-            },
-        ],
-        "mining_summary": "���������������������Ȩ��Ҫ����խ�ĺ�������ѡ��",
-    },
-    "prior_art_stress_test": {
-        "overall_survival_rate": "ѹ����3����������̭2��������1����",
-        "tested_features": [
-            {
-                "candidate_id": "Candidate_A",
-                "feature_name": "�����������ù轺����Ȧ",
-                "test_verdict": "ELIMINATED",
-                "prior_art_hit_location": "D1 ����[0032]��D1 ͼ2��״����",
-                "red_team_reasoning": "D1 �ı��븽ͼ��ָͬ��������⻷�ṹ��������ʽ������",
-                "rebuttal_foundation": "��",
-            },
-            {
-                "candidate_id": "Candidate_B",
-                "feature_name": "����ײ����÷�������",
-                "test_verdict": "ELIMINATED",
-                "prior_art_hit_location": "D2 ����[0018]��D2 ͼ4�ײ�����",
-                "red_team_reasoning": "D2 ������ȷ�����Ҹ�ͼ�ɼ���Ӧ�����ȱ�����ֶȡ�",
-                "rebuttal_foundation": "��",
-            },
-            {
-                "candidate_id": "Candidate_C",
-                "feature_name": "�����뱭����ô����ɵĿ������",
-                "test_verdict": "SURVIVED",
-                "prior_art_hit_location": "��",
-                "red_team_reasoning": "D1/D2 �ı�δ��������ͼ��δ���ֵ��ɿ����ṹ���������ʾ���㡣",
-                "rebuttal_foundation": "��������D1/D2�о�δ���������Ĳ����������ɿ�����ֹ�ṹ��������������ֹ�ȶ���������ɿ��ԡ�",
-            },
-        ],
-        "survived_candidate_ids": ["Candidate_C"],
-        "summary": "��ѡ Candidate_C ͨ���ı�+��ͼ˫��ѹ�����ԣ�����Ϊ��������������",
-    },
-    "strategy_decision": {
-        "global_decision": "AMEND_AND_ARGUE",
-        "strategy_rationale": "Ȩ��Ҫ��1��D1+D2�������������ɰ�ȫ����/������������ʲ����޸�+���·����",
-        "amendment_plan": {
-            "target_independent_claim": 1,
-            "amendment_tactic": "INTRODUCE_SPEC_FEATURE",
-            "source_dependent_claims": [],
-            "survived_candidate_ids": ["Candidate_C"],
-            "amendment_guidance": "�뽫Candidate_C��Ӧԭ����������Ȩ��Ҫ��1���Ľṹ����֮�󣬲�ͳһ���",
-        },
-        "rebuttal_plan": [
-            {
-                "target_claim": 1,
-                "core_argument_logic": "�޸ĺ��Ȩ��Ҫ��1������D1/D2��δ�����ĵ��ɿ�����ֹ�ṹ���γ�ʵ���Խṹ���졣",
-                "evidence_support": "�ڵ�3ͼ�ĺ���������6���ѹ���ȷ�ϸ�����δ��������",
-            }
-        ],
-        "action": "AMEND_AND_ARGUE",
-        "amendment_instruction": "�뽫Candidate_C��Ӧԭ����������Ȩ��Ҫ��1���Ľṹ����֮�󣬲�ͳһ���",
-        "argument_logic": "���ĺ��Ȩ��Ҫ��1������D1/D2��δ�����ĵ��ɿ�����ֹ�ṹ���γ�ʵ���Խṹ���졣",
-        "selected_candidate_ids": ["Candidate_C"],
-    },
-    "claim_amendment": {
-        "is_amended": True,
-        "amendment_basis_statement": "���ĺ��Ȩ��Ҫ��1�����޶���Դ�ں�ѡ����Candidate_C��˵�������[0058]��ͼ3����δ����ԭʼ���ط�Χ��",
-        "claim_mappings": [
-            {
-                "original_claim_number": "ԭȨ��Ҫ��1",
-                "new_claim_number": "��Ȩ��Ҫ��1",
-                "amendment_type": "MODIFIED_WITH_NEW_FEATURE",
-                "amended_text": "һ��ϵͳ�����������ڰ��������ɿ�����Ͻṹ����",
-            }
-        ],
-        "final_claims_text": "1. һ��ϵͳ���������������������ɿ�����Ͻṹ����",
-        "amended_claims": {"claims": [{"id": 1, "text": "һ��ϵͳ���������������������ɿ�����Ͻṹ����"}]},
-        "amendment_log": ["���ڵ�7ʩ��ͼ����������벢У�˱�����á�"],
-    },
-    "argument_writer": {
-        "amendment_statement": "�������Ѷ�Ȩ��Ҫ��������ģ�����������Դ��ԭ˵�������[0058]����ͼ3��δ����ԭ˵�����Ȩ��Ҫ������ط�Χ�����ϡ�ר��������33���涨��",
-        "arguments_by_claim": [
-            {
-                "target_claim": 1,
-                "closest_prior_art": "�Ա��ļ�1��D1��",
-                "distinguishing_features": "�޸ĺ��Ȩ��Ҫ��1�����D1�������������������˴����ɵĿ�����ֹ�ṹ��",
-                "technical_problem_solved": "������������������������ʵ�ʽ������ֹ�ȶ��Բ���������ɿ���Ƿ�ѵ����⡣",
-                "non_obviousness_logic": "D1/D2��δ����������ֹ�ṹ�������з����Ľ����ʾ������������Ա���������Զ��׼����õ�����������",
-                "legal_conclusion": "���ϣ����ĺ��Ȩ��Ҫ��1�߱�ͻ����ʵ�����ص�������Ľ��������ϡ�ר��������22����3�����Ҫ��",
-            }
-        ],
-        "final_reply_text": "�������Ѷ�Ȩ��Ҫ������޸ģ������޶���Դ��ԭ˵�������[0058]����ͼ3��δ����ԭ˵�����Ȩ��Ҫ���������Χ�����ϡ�ר��������33���涨��\n\n����Ȩ��Ҫ��1����ӽ����м���ΪD1���޸ĺ��Ȩ��Ҫ��1�����˴����ɵĿ�����ֹ�ṹ����D1������ȷ���𡣻����������������������������ֹ�ȶ��Լ�����ɿ������⡣D1/D2��δ�ṩ���ýṹ���ڵ�ǰ���������Ľ����ʾ���ʱ���������Ա�޷��Զ��׼��صõ������������ϣ�Ȩ��Ҫ��1���ϡ�ר��������22����3����Թ涨��",
-        "argument_text": "�������Ѷ�Ȩ��Ҫ��������ģ�����������Դ��ԭ˵�������[0058]����ͼ3��δ����ԭ˵�����Ȩ��Ҫ������ط�Χ�����ϡ�ר��������33���涨������Ȩ��Ҫ��1����ӽ����м���ΪD1�����ĺ��Ȩ��Ҫ��1�����˴����ɵĿ�����ֹ�ṹ����D1������ȷ���𡣻��ڸ������������������������ֹ�ȶ��Լ��ܷ�ɿ������⡣D1/D2��δ�ṩ���ýṹ������ǰ���������Ľ����ʾ���ʱ���������Ա�����Զ��׼����õ������������ϣ�Ȩ��Ҫ��1���ϡ�ר��������22����3����Թ涨��",
-        "key_points": ["����������ȷ", "ʵ�ʼ�����������", "�޽����ʾ"],
-    },
-    "spec_update": {
-        "requires_spec_update": True,
-        "amendment_items": [
-            {
-                "target_paragraph": "˵�������ʵʩ��ʽ���� ��[0035]��",
-                "original_text_snippet": "�������Ӽ�Ϊ���Բ���",
-                "amended_text_snippet": "����V�����Ῠ��Ϊ���Բ���",
-                "amendment_reason": "Ϊ�����ĺ��Ȩ��Ҫ��1���ﱣ��һ�£�������Ӧ���޸ġ�",
-            }
-        ],
-        "article_33_declaration": "����˵�������Ľ�Ϊ����ͳһ����Ӧ�Ե�����δ�����µļ������ݣ����ϡ�ר��������33���Ĺ涨��",
-        "applied": True,
-        "changes": ["˵�������ʵʩ��ʽ���� ��[0035]��: �������Ӽ�Ϊ���Բ��� -> ����V�����Ῠ��Ϊ���Բ���"],
-        "updated_excerpt": "",
-    },
-    "response_traceability": {
-        "global_go_no_go": "GO",
-        "support_basis_audit": [
-            {
-                "severity": "PASS",
-                "risk_category": "A26.4_UNSUPPORTED",
-                "problematic_text": "��",
-                "audit_reasoning": "���ĺ�������������˵�������[0058]�͸�ͼ3���ҵ�֧�š�",
-                "suggested_remedy": "��",
-            }
-        ],
-        "logic_consistency_audit": [
-            {
-                "severity": "PASS",
-                "risk_category": "LOGIC_INCONSISTENCY",
-                "problematic_text": "��",
-                "audit_reasoning": "����������е��������������ĺ�Ȩ��Ҫ��һ�¡�",
-                "suggested_remedy": "��",
-            }
-        ],
-        "harmful_admission_audit": [
-            {
-                "severity": "WARNING",
-                "risk_category": "HARMFUL_ADMISSION",
-                "problematic_text": "���Ա���ۻ�������",
-                "audit_reasoning": "���������ò�����������������ⲻ��Ҫ�Ľ�ֹ�������ա�",
-                "suggested_remedy": "������������������Ϊ��������������������������ϡ���",
-            }
-        ],
-        "final_strategy_summary": "��ǰ�������ύ��������΢���ò���Ǻ��ύ�����ס�",
-        "claim_support_ok": True,
-        "logic_consistency_ok": True,
-        "findings": [],
-        "final_risk_summary": "��ǰ���߼���Ǣ�Ҳ��������Գ���Χ���գ������˹����˴��ǿ�ȡ�",
-    },
-}
-
-_COMPARE_STUBS = {
-    "draft_parser": {
-        "claims_tree": [
-            {
-                "claim_number": 1,
-                "is_independent": True,
-                "dependency": [],
-                "atomic_features": [
-                    {
-                        "feature_id": "F1.1",
-                        "verbatim_text": "����������ֵ����Ӧģ��",
-                        "entity_components": ["������ֵ����Ӧģ��"],
-                        "connection_and_synergy": "������ֵ����Ӧģ����ջش�״̬����̬����������ֵ���γɱջ�Эͬ��",
-                        "visual_anchor": {
-                            "reference_numeral": "10",
-                            "figure_labels": ["ͼ1"],
-                            "visual_morphology": "����10λ�����Ƶ�Ԫ��������ִ�е�Ԫͨ���ź��������γɱջ���",
-                        },
-                    },
-                    {
-                        "feature_id": "F1.2",
-                        "verbatim_text": "����ִ�лش��ջ�",
-                        "entity_components": ["ִ�е�Ԫ", "�ش�·��"],
-                        "connection_and_synergy": "ִ�е�Ԫ������������·���������ƶˣ�����ִ��-����������·��",
-                        "visual_anchor": {
-                            "reference_numeral": "20",
-                            "figure_labels": ["ͼ1", "ͼ2"],
-                            "visual_morphology": "�ش�·��20��ִ�ж˷��ؿ��ƶˣ����ɻ��η�����·��",
-                        },
-                    },
-                ],
-            }
-        ],
-        "fallback_feature_index": [
-            {
-                "feature_name": "��ֵ�ر궨��Ԫ",
-                "verbatim_quote": "�ڲ�ͬ�����£���ֵ�ر궨��Ԫ���ڶ�̬������ֵ���䲢������²�����",
-                "connection_and_synergy": "��ֵ�ر궨��Ԫ�뷴�����������������ݲ������ʵʱ������ֵ������",
-                "source_location": "˵������[0035]�Σ�ͼ2",
-                "visual_anchor": {
-                    "reference_numeral": "10",
-                    "figure_labels": ["ͼ2"],
-                    "visual_morphology": "����10λ����ֵ����֧·���������������˲��á�",
-                },
-            }
-        ],
-    },
-    "prior_art_parser": {
-        "comparison_goal": "patentability",
-        "prior_art_profiles": [
-            {
-                "prior_art_id": "D1",
-                "core_technical_problem_solved": "D1��Ի������Ʊջ��ȶ������⣬������ֵ�������������Эͬ������",
-                "component_index": [
-                    {
-                        "component_name": "��ֵ���ڹ���",
-                        "reference_numeral": "10",
-                        "structural_connections_and_mechanisms": "˵�����[0032]�μ��أ�����10�����֧·���Ӳ�����ֵ���зּ����ڡ�",
-                        "visual_appearance": "ͼ2��ʾ����10��Բ����Ͳ״��λ��������ǻ���ߡ�",
-                    }
-                ],
-                "figure_library": [
-                    {
-                        "figure_label": "ͼ2",
-                        "observed_components": ["10", "20"],
-                        "visual_connections": [
-                            {
-                                "source_component": "��ֵ��������(10)",
-                                "target_component": "����·��(20)",
-                                "kinematic_relationship": "ͬ�����Ӳ��γ�ֱ�����ӣ�����ʱ�е��źŴ���Эͬ��",
-                            }
-                        ],
-                    }
-                ],
-                "reading_audit": {
-                    "input_image_count": 6,
-                    "actually_used_image_count": 5,
-                    "omission_warning": "����6��ͼ��������5�ţ�����©������",
-                },
-            }
-        ],
-        "overall_summary": "�Ա��ļ����帲�Ǳ����������ɣ�����עϸ������������",
-    },
-    "matrix_comparison": {
-        "global_conclusion": "Ȩ��Ҫ��1����������D1������ǿ���ϣ�����������������׼����ǿ������",
-        "prior_art_targeted_report": [
-            {
-                "claim_number": 1,
-                "feature_collisions": [
-                    {
-                        "feature_id": "F1.1",
-                        "prior_art_id": "D1",
-                        "text_evidence": "D1[0032]������ֵ�ּ����ڻ��ơ�",
-                        "visual_evidence": "ͼ2����10λ�ڿ���֧·���ṹ���ܶ�Ӧ��",
-                        "component_match_status": "���У�D1������ֵ���ڹ�������Ӧ���Ʋ�����",
-                        "relationship_match_status": "���У�����10������֧·������ϵ�뱾���ջ������߼�һ�¡�",
-                        "disclosure_status": "EXPLICIT",
-                        "collision_reasoning": "�ı��븽ͼ����ʾ��Ӧ��ֵ�������ơ�",
-                    },
-                    {
-                        "feature_id": "F1.2",
-                        "prior_art_id": "D1",
-                        "text_evidence": "D1[0038]����ִ�н���������ƶˡ�",
-                        "visual_evidence": "ͼ2�ɼ�����·��20����ִ�ж������ƶˡ�",
-                        "component_match_status": "���У�D1����ִ�ж˼�����·������������",
-                        "relationship_match_status": "���У��ش�·�����ӷ����Эͬ���������뱾��һ�¡�",
-                        "disclosure_status": "EXPLICIT",
-                        "collision_reasoning": "�ش��ջ���D1�Ѿ߱���ȷ������",
-                    },
-                ],
-                "claim_safety_status": "DESTROYED",
-            }
-        ],
-    },
-    "risk_assessment": {
-        "global_risk_summary": "��Ȩ1��ǰ��ӱ��/�����Է��ոߣ���Χ��δ�������˹�ϵ�ؽ����ߡ�",
-        "claim_assessments": [
-            {
-                "claim_number": 1,
-                "novelty_risk": "FATAL",
-                "inventiveness_risk": "HIGH",
-                "topology_difference_analysis": "D1�ѹ�����Ҫ������������·���������в��첻�����γ��ȶ��������֡�",
-                "breakthrough_point": "��˵�����������������ջ�����������Эͬ������������Զ��׼�·����",
-                "robust_distinguishing_features": ["��ֵ�ر궨��Ԫ��ش�·���Ķ�̬��ϵ��ڻ���"],
-            }
-        ],
-        "strategic_amendment_direction": "���Ȱ�˵�����еĶ�̬��ϵ����������Ȩ��Ҫ��1��ͻ�����ӹ�ϵ��Эͬ������",
-    },
-    "amendment_suggestion": {
-        "overall_rescue_strategy": "Χ��δ������Эͬ���ӻ����ع���Ȩ���������˵������ȷ֧�ֵĶ�̬���������",
-        "concrete_amendments": [
-            {
-                "target_claim_number": 1,
-                "amendment_type": "INTRODUCE_SPEC_FEATURE",
-                "source_feature_name": "��ֵ�ر궨��Ԫ��ش���ϻ���",
-                "source_location": "˵������[0035]�Σ�ͼ2",
-                "verbatim_addition": "��ֵ���궨��Ԫ��������·����������ֵ������ж�̬��ϵ�����",
-                "synergy_and_mechanism_focus": "ͨ���ش�-���궨�Ķ�̬�����ϵ������D1��̬��ֵ������",
-                "draft_amended_claim_text": "����Ȩ��Ҫ��1����ϵͳ�����������ڣ���ֵ�ر궨��Ԫ���ݻش�·����������ֵ������ж�̬��ϵ��ڡ�",
-                "expected_overcoming_effect": "ͨ���޶���ϵ��ڻ�����ų�D1���о�̬���ӷ������ؽ������ԡ�",
-            }
-        ],
-        "article_33_compliance_statement": "�����޸ľ���ԭ˵�����븽ͼ���ݣ�δ����ԭ�����ļ�δ���ص������",
-    },
-}
-
-_POLISH_STUBS = {
-    "diagnostic_analyzer": {
-        "overview": "�����������Ȩ��Ҫ������ﲻ�㡢��Ȩ������α�����˵���鼼��Ч����֤ƫ�������⡣",
-        "wide_scope_issues": [
-            {
-                "issue_type": "����ڶ�",
-                "severity": "high",
-                "claim_scope": "Ȩ��Ҫ��1",
-                "evidence": "��Ȩ�Բ������ʶѵ�Ϊ����ȱ�ٹؼ����ӹ�ϵ��Эͬ�����޶���",
-                "recommendation": "����Ȩ��������������Эͬ��������ⱻ���м���ͬ���������ǡ�",
-            }
-        ],
-        "dependent_gap_issues": [
-            {
-                "issue_type": "��Ȩ�ϲ�",
-                "severity": "medium",
-                "claim_scope": "Ȩ��Ҫ��2-4",
-                "evidence": "��Ȩ��Ϊ���ʻ���״����������ȱ��ʵ�ʻ�����խ��",
-                "recommendation": "�Զ���������������ϵ������Ȩ���������",
-            }
-        ],
-        "effect_gap_issues": [
-            {
-                "issue_type": "Ч������",
-                "severity": "medium",
-                "claim_scope": "˵���鷢������/ʵʩ��ʽ",
-                "evidence": "�ṹ�����뼼�����⡢����Ч��ȱ����ȷ�������",
-                "recommendation": "���㡮�ṹ-����-Ч��������ʽ��֤��",
-            }
-        ],
-        "key_repair_targets": ["��Ȩ���ӻ����ǿ", "��Ȩ��������չ", "˵����Ч���������"],
-    },
-    "synergy_miner": {
-        "vault_summary": "���������������ǿ��ӱ��/�����Եĸ߼�ֵЭͬ����������",
-        "high_value_features": [
-            {
-                "feature_name": "�����λ��λ����",
-                "source_location": "˵�����[0035]�Σ�ͼ2",
-                "verbatim_quote": "��λ�����������������������������ת��ʱ�γɴ�λ������",
-                "connection_and_synergy": "��λ���뵼����ͨ���������ʵ�ֶ�̬��λ��������������������",
-                "value_score": "high",
-                "recommended_usage": "��Ȩ",
-            },
-            {
-                "feature_name": "����Ԥ��Эͬ����",
-                "source_location": "˵������[0042]�Σ�ͼ3",
-                "verbatim_quote": "���Լ��Ի������ʩ��Ԥ���������ڳ���������ṩ����ָ���",
-                "connection_and_synergy": "���Լ��뻬������γ�Ԥ��-�ͷ�Эͬ�����Ϳ��͸��ʡ�",
-                "value_score": "medium",
-                "recommended_usage": "��Ȩ",
-            },
-        ],
-    },
-    "claim_architect": {
-        "architecture_summary": "�������Ȩ�����ǿ���Ȩ�����",
-        "rebuilt_claims": [
-            {
-                "claim_number": 1,
-                "claim_type": "independent",
-                "depends_on": [],
-                "draft_text": "һ��װ�ã���������������λ�������������������������ת��ʱ�γɴ�λ����������������λ�ơ�",
-                "added_mechanisms": ["�����λ��������"],
-                "source_basis": ["˵�����[0035]��", "ͼ2"],
-            },
-            {
-                "claim_number": 2,
-                "claim_type": "dependent",
-                "depends_on": [1],
-                "draft_text": "����Ȩ��Ҫ��1����װ�ã����������������Լ��Ի������ʩ��Ԥ��������������ṩ�ָ����塣",
-                "added_mechanisms": ["Ԥ��-�ָ�Эͬ����"],
-                "source_basis": ["˵������[0042]��", "ͼ3"],
-            },
-        ],
-        "optimized_claims_text": "1. һ��װ�ã���������������λ�������������������������ת��ʱ�γɴ�λ����������������λ�ơ�\n2. ����Ȩ��Ҫ��1����װ�ã����������������Լ��Ի������ʩ��Ԥ��������������ṩ�ָ����塣",
-        "article_33_basis": "������������Դ��ԭ˵������[0035]�Ρ���[0042]�μ���ͼ2��ͼ3��",
-    },
-    "specification_amplifier": {
-        "amplification_summary": "�Ѳ�ȫ�ؼ��ṹ��Эͬ�����뼼��Ч�������֤��",
-        "mechanism_effect_map": [
-            {
-                "feature_name": "�����λ��λ����",
-                "mechanism_explanation": "��λ���뵼���������ת���������γɴ�λ���ӣ���̬�����������·����",
-                "technical_effect": "����������Ƶ�����µ������뿨�����գ������ȶ��ԡ�",
-            }
-        ],
-        "optimized_specification_text": "�������У���λ���ؾ������ڵ�����ڣ������ת��ʱ�γɴ�λ������ϵ���ýṹ�뻬�������Ԥ��������Эͬ���ã����ڳ���غ�����������ܶ���ʵ�ֿ��ٻָ����Ӷ�������м��������ѡ��׿��͵����⡣",
-    },
-    "adversarial_reviewer": {
-        "pass_gate": True,
-        "issues": [],
-        "return_instruction": "ͨ����������ˡ�",
-        "final_judgement": "��ǰ����ĺ��Ļ��������ȷ�����Ա�����ƴ������ֱ�Ӳ������ɽ��붨�塣",
-    },
-}
+_DRAFT_STUBS = {'extract_tech': {'source_quotes': ['????', '????', '????'],
+                  'background_and_core_problems': ['????', '????', '????'],
+                  'core_solution_overview': '????',
+                  'detailed_features': [{'feature_name': '????',
+                                         'detailed_structure_or_step': '????',
+                                         'solved_sub_problem': '????',
+                                         'specific_effect': '????'},
+                                        {'feature_name': '????',
+                                         'detailed_structure_or_step': '????',
+                                         'solved_sub_problem': '????',
+                                         'specific_effect': '????'},
+                                        {'feature_name': '????',
+                                         'detailed_structure_or_step': '????',
+                                         'solved_sub_problem': '????',
+                                         'specific_effect': '????'}],
+                  'overall_advantages': ['????', '????', '????']},
+ 'draft_claims': {'claims': [{'claim_number': 1,
+                              'claim_type': 'independent',
+                              'depends_on': [],
+                              'preamble': '????',
+                              'transition': '????',
+                              'elements': ['????', '????', '????'],
+                              'full_text': '????'},
+                             {'claim_number': 2,
+                              'claim_type': 'dependent',
+                              'depends_on': [1],
+                              'preamble': '????',
+                              'transition': '????',
+                              'elements': ['????', '????'],
+                              'full_text': '????'}]},
+ 'revise_claims': {'claims': [{'claim_number': 1,
+                               'claim_type': 'independent',
+                               'depends_on': [],
+                               'preamble': '????',
+                               'transition': '????',
+                               'elements': ['????', '????'],
+                               'full_text': '????'}]},
+ 'write_spec': {'title': '????',
+                'technical_field': '????',
+                'background_art': '????',
+                'invention_content': {'technical_problem': '????',
+                                      'technical_solution': '????',
+                                      'beneficial_effects': '????'},
+                'drawings_description': '????',
+                'detailed_implementation': {'introductory_boilerplate': '????',
+                                            'overall_architecture': '????',
+                                            'component_details': [{'feature_name': '????',
+                                                                   'structure_and_connection': '????',
+                                                                   'working_principle': '????'},
+                                                                  {'feature_name': '????',
+                                                                   'structure_and_connection': '????',
+                                                                   'working_principle': '????'},
+                                                                  {'feature_name': '????',
+                                                                   'structure_and_connection': '????',
+                                                                   'working_principle': '????'}],
+                                            'workflow_description': '????',
+                                            'alternative_embodiments': '????'}},
+ 'traceability': {'reports': [{'claim_number': 1,
+                               'elements_evidence': [{'feature_text': '????',
+                                                      'verbatim_quote': '????',
+                                                      'support_level': 'Explicit',
+                                                      'reasoning': '????'},
+                                                     {'feature_text': '????',
+                                                      'verbatim_quote': '????',
+                                                      'support_level': 'Explicit',
+                                                      'reasoning': '????'},
+                                                     {'feature_text': '????',
+                                                      'verbatim_quote': '????',
+                                                      'support_level': 'Explicit',
+                                                      'reasoning': '????'}],
+                               'is_fully_supported': True}],
+                  'overall_risk_assessment': '????'},
+ 'logic_review': {'issues': []},
+ 'drawing_map': {'figures': [],
+                 'overall_notes': 'No drawing analysis available in stub mode.',
+                 'warnings': ['stub_mode_no_vision']}}
+_OA_STUBS = {'oa_parser': {'defects': [{'defect_type': '????',
+                            'rejected_claims': [1],
+                            'main_cited_docs': ['D1', 'D2'],
+                            'feature_mappings': [{'target_feature': '????',
+                                                  'prior_art_doc': 'D1',
+                                                  'cited_paragraphs': '[0032]',
+                                                  'cited_figures': '????',
+                                                  'examiner_logic': '????'}],
+                            'combination_motivation': '????'}],
+               'overall_summary': '????'},
+ 'multimodal_prior_art': {'supporting_items': [{'target_feature': '????',
+                                                'prior_art_text_disclosure': '????',
+                                                'prior_art_visual_disclosure': '????',
+                                                'amendment_avoidance_warning': '????'}],
+                          'disputable_items': [{'target_feature': '????',
+                                                'examiner_assertion': '????',
+                                                'multimodal_reality_check': '????',
+                                                'rebuttal_angle': '????'}],
+                          'examiner_conclusion_supported': True,
+                          'confidence': 'High',
+                          'overall_conclusion': '????'},
+ 'application_baseline': {'claims_tree': [{'claim_number': 1,
+                                           'claim_type': 'independent',
+                                           'depends_on': [],
+                                           'features': [{'feature_id': '1A',
+                                                         'feature_text': '????'},
+                                                        {'feature_id': '1B',
+                                                         'feature_text': '????'},
+                                                        {'feature_id': '1C',
+                                                         'feature_text': '????'}]},
+                                          {'claim_number': 2,
+                                           'claim_type': 'dependent',
+                                           'depends_on': [1],
+                                           'features': [{'feature_id': '2A',
+                                                         'feature_text': '????'}]}],
+                          'spec_feature_index': [{'component_or_step_name': '????',
+                                                  'reference_numeral': '10',
+                                                  'detailed_description': '????',
+                                                  'alternative_embodiments': '????',
+                                                  'source_paragraph': '????'},
+                                                 {'component_or_step_name': '????',
+                                                  'reference_numeral': '????',
+                                                  'detailed_description': '????',
+                                                  'alternative_embodiments': '????',
+                                                  'source_paragraph': '????'}],
+                          'claim_tree_overview': '????',
+                          'normalized_claim_features': ['????', '????', '????'],
+                          'fallback_features': ['????', '????'],
+                          'specification_feature_index': ['????', '????']},
+ 'concession_gap': {'overall_strategy_summary': '????',
+                    'claim_assessments': [{'claim_number': 1,
+                                           'status': 'DEFEATED',
+                                           'reasoning': '????'},
+                                          {'claim_number': 3,
+                                           'status': 'MERGE_CANDIDATE',
+                                           'reasoning': '????'}],
+                    'recommended_merges': [3],
+                    'mining_directives': [{'target_component_or_step': '????',
+                                           'technical_gap_to_fill': '????',
+                                           'avoidance_warning': '????'}],
+                    'failed_claims': [1],
+                    'confirmed_points': ['????'],
+                    'gap_targets': ['????', '????', '????'],
+                    'rationale': '????'},
+ 'fallback_feature_mining': {'mining_status': 'SUCCESS',
+                             'candidates': [{'candidate_id': 'Candidate_A',
+                                             'addressed_directive': '????',
+                                             'feature_name': '????',
+                                             'reference_numeral': '15',
+                                             'verbatim_quote': '????',
+                                             'source_location': '????',
+                                             'gap_filling_rationale': '????'},
+                                            {'candidate_id': 'Candidate_B',
+                                             'addressed_directive': '????',
+                                             'feature_name': '????',
+                                             'reference_numeral': '????',
+                                             'verbatim_quote': '????',
+                                             'source_location': '????',
+                                             'gap_filling_rationale': '????'},
+                                            {'candidate_id': 'Candidate_C',
+                                             'addressed_directive': '????',
+                                             'feature_name': '????',
+                                             'reference_numeral': '20',
+                                             'verbatim_quote': '????',
+                                             'source_location': '????',
+                                             'gap_filling_rationale': '????'}],
+                             'mining_summary': '????'},
+ 'prior_art_stress_test': {'overall_survival_rate': '????',
+                           'tested_features': [{'candidate_id': 'Candidate_A',
+                                                'feature_name': '????',
+                                                'test_verdict': 'ELIMINATED',
+                                                'prior_art_hit_location': '????',
+                                                'red_team_reasoning': '????',
+                                                'rebuttal_foundation': '????'},
+                                               {'candidate_id': 'Candidate_B',
+                                                'feature_name': '????',
+                                                'test_verdict': 'ELIMINATED',
+                                                'prior_art_hit_location': '????',
+                                                'red_team_reasoning': '????',
+                                                'rebuttal_foundation': '????'},
+                                               {'candidate_id': 'Candidate_C',
+                                                'feature_name': '????',
+                                                'test_verdict': 'SURVIVED',
+                                                'prior_art_hit_location': '????',
+                                                'red_team_reasoning': '????',
+                                                'rebuttal_foundation': '????'}],
+                           'survived_candidate_ids': ['Candidate_C'],
+                           'summary': '????'},
+ 'strategy_decision': {'global_decision': 'AMEND_AND_ARGUE',
+                       'strategy_rationale': '????',
+                       'amendment_plan': {'target_independent_claim': 1,
+                                          'amendment_tactic': 'INTRODUCE_SPEC_FEATURE',
+                                          'source_dependent_claims': [],
+                                          'survived_candidate_ids': ['Candidate_C'],
+                                          'amendment_guidance': '????'},
+                       'rebuttal_plan': [{'target_claim': 1,
+                                          'core_argument_logic': '????',
+                                          'evidence_support': '????'}],
+                       'action': 'AMEND_AND_ARGUE',
+                       'amendment_instruction': '????',
+                       'argument_logic': '????',
+                       'selected_candidate_ids': ['Candidate_C']},
+ 'claim_amendment': {'is_amended': True,
+                     'amendment_basis_statement': '????',
+                     'claim_mappings': [{'original_claim_number': '????',
+                                         'new_claim_number': '????',
+                                         'amendment_type': 'MODIFIED_WITH_NEW_FEATURE',
+                                         'amended_text': '????'}],
+                     'final_claims_text': '????',
+                     'amended_claims': {'claims': [{'id': 1, 'text': '????'}]},
+                     'amendment_log': ['????']},
+ 'argument_writer': {'amendment_statement': '????',
+                     'arguments_by_claim': [{'target_claim': 1,
+                                             'closest_prior_art': '????',
+                                             'distinguishing_features': '????',
+                                             'technical_problem_solved': '????',
+                                             'non_obviousness_logic': '????',
+                                             'legal_conclusion': '????'}],
+                     'final_reply_text': '????',
+                     'argument_text': '????',
+                     'key_points': ['????', '????', '????']},
+ 'spec_update': {'requires_spec_update': True,
+                 'amendment_items': [{'target_paragraph': '????',
+                                      'original_text_snippet': '????',
+                                      'amended_text_snippet': '????',
+                                      'amendment_reason': '????'}],
+                 'article_33_declaration': '????',
+                 'applied': True,
+                 'changes': ['????'],
+                 'updated_excerpt': ''},
+ 'response_traceability': {'global_go_no_go': 'GO',
+                           'support_basis_audit': [{'severity': 'PASS',
+                                                    'risk_category': 'A26.4_UNSUPPORTED',
+                                                    'problematic_text': '????',
+                                                    'audit_reasoning': '????',
+                                                    'suggested_remedy': '????'}],
+                           'logic_consistency_audit': [{'severity': 'PASS',
+                                                        'risk_category': 'LOGIC_INCONSISTENCY',
+                                                        'problematic_text': '????',
+                                                        'audit_reasoning': '????',
+                                                        'suggested_remedy': '????'}],
+                           'harmful_admission_audit': [{'severity': 'WARNING',
+                                                        'risk_category': 'HARMFUL_ADMISSION',
+                                                        'problematic_text': '????',
+                                                        'audit_reasoning': '????',
+                                                        'suggested_remedy': '????'}],
+                           'final_strategy_summary': '????',
+                           'claim_support_ok': True,
+                           'logic_consistency_ok': True,
+                           'findings': [],
+                           'final_risk_summary': '????'}}
+_COMPARE_STUBS = {'draft_parser': {'claims_tree': [{'claim_number': 1,
+                                   'is_independent': True,
+                                   'dependency': [],
+                                   'atomic_features': [{'feature_id': 'F1.1',
+                                                        'verbatim_text': '????',
+                                                        'entity_components': ['????'],
+                                                        'connection_and_synergy': '????',
+                                                        'visual_anchor': {'reference_numeral': '10',
+                                                                          'figure_labels': ['????'],
+                                                                          'visual_morphology': '????'}},
+                                                       {'feature_id': 'F1.2',
+                                                        'verbatim_text': '????',
+                                                        'entity_components': ['????', '????'],
+                                                        'connection_and_synergy': '????',
+                                                        'visual_anchor': {'reference_numeral': '20',
+                                                                          'figure_labels': ['????',
+                                                                                            '????'],
+                                                                          'visual_morphology': '????'}}]}],
+                  'fallback_feature_index': [{'feature_name': '????',
+                                              'verbatim_quote': '????',
+                                              'connection_and_synergy': '????',
+                                              'source_location': '????',
+                                              'visual_anchor': {'reference_numeral': '10',
+                                                                'figure_labels': ['????'],
+                                                                'visual_morphology': '????'}}]},
+ 'prior_art_parser': {'comparison_goal': 'patentability',
+                      'prior_art_profiles': [{'prior_art_id': 'D1',
+                                              'core_technical_problem_solved': '????',
+                                              'component_index': [{'component_name': '????',
+                                                                   'reference_numeral': '10',
+                                                                   'structural_connections_and_mechanisms': '????',
+                                                                   'visual_appearance': '????'}],
+                                              'figure_library': [{'figure_label': '????',
+                                                                  'observed_components': ['10',
+                                                                                          '20'],
+                                                                  'visual_connections': [{'source_component': '????',
+                                                                                          'target_component': '????',
+                                                                                          'kinematic_relationship': '????'}]}],
+                                              'reading_audit': {'input_image_count': 6,
+                                                                'actually_used_image_count': 5,
+                                                                'omission_warning': '????'}}],
+                      'overall_summary': '????'},
+ 'matrix_comparison': {'global_conclusion': '????',
+                       'prior_art_targeted_report': [{'claim_number': 1,
+                                                      'feature_collisions': [{'feature_id': 'F1.1',
+                                                                              'prior_art_id': 'D1',
+                                                                              'text_evidence': '????',
+                                                                              'visual_evidence': '????',
+                                                                              'component_match_status': '????',
+                                                                              'relationship_match_status': '????',
+                                                                              'disclosure_status': 'EXPLICIT',
+                                                                              'collision_reasoning': '????'},
+                                                                             {'feature_id': 'F1.2',
+                                                                              'prior_art_id': 'D1',
+                                                                              'text_evidence': '????',
+                                                                              'visual_evidence': '????',
+                                                                              'component_match_status': '????',
+                                                                              'relationship_match_status': '????',
+                                                                              'disclosure_status': 'EXPLICIT',
+                                                                              'collision_reasoning': '????'}],
+                                                      'claim_safety_status': 'DESTROYED'}]},
+ 'risk_assessment': {'global_risk_summary': '????',
+                     'claim_assessments': [{'claim_number': 1,
+                                            'novelty_risk': 'FATAL',
+                                            'inventiveness_risk': 'HIGH',
+                                            'topology_difference_analysis': '????',
+                                            'breakthrough_point': '????',
+                                            'robust_distinguishing_features': ['????']}],
+                     'strategic_amendment_direction': '????'},
+ 'amendment_suggestion': {'overall_rescue_strategy': '????',
+                          'concrete_amendments': [{'target_claim_number': 1,
+                                                   'amendment_type': 'INTRODUCE_SPEC_FEATURE',
+                                                   'source_feature_name': '????',
+                                                   'source_location': '????',
+                                                   'verbatim_addition': '????',
+                                                   'synergy_and_mechanism_focus': '????',
+                                                   'draft_amended_claim_text': '????',
+                                                   'expected_overcoming_effect': '????'}],
+                          'article_33_compliance_statement': '????'}}
+_POLISH_STUBS = {'diagnostic_analyzer': {'overview': '????',
+                         'wide_scope_issues': [{'issue_type': '????',
+                                                'severity': 'high',
+                                                'claim_scope': '????',
+                                                'evidence': '????',
+                                                'recommendation': '????'}],
+                         'dependent_gap_issues': [{'issue_type': '????',
+                                                   'severity': 'medium',
+                                                   'claim_scope': '????',
+                                                   'evidence': '????',
+                                                   'recommendation': '????'}],
+                         'effect_gap_issues': [{'issue_type': '????',
+                                                'severity': 'medium',
+                                                'claim_scope': '????',
+                                                'evidence': '????',
+                                                'recommendation': '????'}],
+                         'key_repair_targets': ['????', '????', '????']},
+ 'synergy_miner': {'vault_summary': '????',
+                   'high_value_features': [{'feature_name': '????',
+                                            'source_location': '????',
+                                            'verbatim_quote': '????',
+                                            'connection_and_synergy': '????',
+                                            'value_score': 'high',
+                                            'recommended_usage': '????'},
+                                           {'feature_name': '????',
+                                            'source_location': '????',
+                                            'verbatim_quote': '????',
+                                            'connection_and_synergy': '????',
+                                            'value_score': 'medium',
+                                            'recommended_usage': '????'}]},
+ 'claim_architect': {'architecture_summary': '????',
+                     'rebuilt_claims': [{'claim_number': 1,
+                                         'claim_type': 'independent',
+                                         'depends_on': [],
+                                         'draft_text': '????',
+                                         'added_mechanisms': ['????'],
+                                         'source_basis': ['????', '????']},
+                                        {'claim_number': 2,
+                                         'claim_type': 'dependent',
+                                         'depends_on': [1],
+                                         'draft_text': '????',
+                                         'added_mechanisms': ['????'],
+                                         'source_basis': ['????', '????']}],
+                     'optimized_claims_text': '????',
+                     'article_33_basis': '????'},
+ 'specification_amplifier': {'amplification_summary': '????',
+                             'mechanism_effect_map': [{'feature_name': '????',
+                                                       'mechanism_explanation': '????',
+                                                       'technical_effect': '????'}],
+                             'optimized_specification_text': '????'},
+ 'adversarial_reviewer': {'pass_gate': True,
+                          'issues': [],
+                          'return_instruction': '????',
+                          'final_judgement': '????'}}
 
 def _minimal_specification_stub() -> dict[str, Any]:
-    """
-    Stable fallback stub for draft specification generation.
-    Must satisfy models.draft_schemas.Specification constraints.
-    """
+    write_spec = _DRAFT_STUBS.get("write_spec")
+    if isinstance(write_spec, dict):
+        return cast(dict[str, Any], write_spec)
     return {
-        "title": "一种多级联动控制系统",
-        "technical_field": "本发明涉及工业自动化控制技术领域，尤其涉及一种用于多执行单元协同调度与状态闭环控制的系统与方法。",
-        "background_art": (
-            "现有控制系统通常采用静态参数或单点控制方式，面对复杂工况时容易出现响应滞后、控制精度下降和协同失衡等问题。"
-            "尤其在多执行单元并行工作场景中，缺乏统一状态感知与联动策略会导致系统振荡、能耗上升以及维护成本增加。"
-            "因此，需要一种能够实现实时监测、动态决策与闭环执行的一体化控制方案。"
-        ),
+        "title": "????",
+        "technical_field": "????",
+        "background_art": "????",
         "invention_content": {
-            "technical_problem": "本发明要解决的技术问题在于：在多执行单元协同场景下，如何同时提升状态感知准确性、联动控制稳定性以及异常恢复能力。",
-            "technical_solution": (
-                "本发明提供一种多级联动控制系统，包括监测单元、执行单元以及协同决策单元。"
-                "监测单元用于实时采集设备运行状态并输出结构化状态信息；"
-                "协同决策单元基于状态信息进行联动关系计算，生成执行策略与修正指令；"
-                "执行单元根据所述执行策略完成动作输出，并将执行反馈回传至协同决策单元形成闭环。"
-                "在异常场景下，系统根据预设规则自动触发降级与恢复流程，从而保证连续运行能力。"
-            ),
-            "beneficial_effects": (
-                "与现有技术相比，本发明通过监测-决策-执行闭环链路显著提高了控制稳定性与响应速度。"
-                "同时，借助多执行单元协同策略可降低系统振荡风险，提升复杂工况下的任务完成率。"
-                "此外，异常降级与恢复机制能够减少人工干预频次并降低运维成本。"
-            ),
+            "technical_problem": "????",
+            "technical_solution": "????",
+            "beneficial_effects": "????",
         },
-        "drawings_description": "图1为系统总体结构示意图；图2为监测单元与执行单元的连接关系示意图；图3为控制流程示意图。",
+        "drawings_description": "????",
         "detailed_implementation": {
-            "introductory_boilerplate": "以下结合附图对本发明实施例作进一步详细说明，所述实施例用于说明本发明而非限制本发明的保护范围。",
-            "overall_architecture": (
-                "如图1所示，系统由监测单元、协同决策单元和执行单元构成。"
-                "监测单元持续采集温度、压力、位移或转速等运行参数，并通过数据总线发送至协同决策单元。"
-                "协同决策单元根据多源参数构建状态向量，执行联动规则匹配与控制量计算，再将控制指令下发至执行单元。"
-                "执行单元完成动作后回传反馈，形成实时闭环。"
-            ),
-            "component_details": [
-                {
-                    "feature_name": "监测单元",
-                    "structure_and_connection": "监测单元包括传感器组、信号调理模块和通信接口，所述通信接口与协同决策单元双向连接，用于传输状态数据与校准参数。",
-                    "working_principle": "监测单元对关键工况参数进行周期采样与异常识别，并将结构化状态信息发送至协同决策单元作为联动计算输入。",
-                },
-                {
-                    "feature_name": "协同决策单元",
-                    "structure_and_connection": "协同决策单元与监测单元、执行单元分别连接，内置策略引擎和状态评估模块，用于生成多执行对象的协同控制指令。",
-                    "working_principle": "协同决策单元根据实时状态进行目标匹配与约束求解，输出主控制量和修正控制量，实现多执行单元的协调动作。",
-                },
-                {
-                    "feature_name": "执行单元",
-                    "structure_and_connection": "执行单元包括驱动模块与执行机构，驱动模块接收协同决策单元下发的控制指令并驱动执行机构完成预设动作。",
-                    "working_principle": "执行单元按照指令完成动作并实时回传执行反馈，当反馈偏离阈值时触发修正流程，以保证控制过程稳定。",
-                },
-            ],
-            "workflow_description": (
-                "系统启动后，监测单元先完成参数采集与状态上报；"
-                "协同决策单元随后执行策略计算并下发控制指令；"
-                "执行单元完成动作并回传反馈；"
-                "协同决策单元根据反馈进行二次修正，必要时触发异常降级策略；"
-                "整个流程循环执行，维持系统在目标工况下稳定运行。"
-            ),
-            "alternative_embodiments": "在其他实施方式中，监测单元可采用不同类型传感器组合，协同决策单元可采用规则引擎或学习型模型实现，执行单元可根据应用场景替换为液压、气动或电驱机构。",
+            "introductory_boilerplate": "????",
+            "overall_architecture": "????",
+            "component_details": [],
+            "workflow_description": "????",
+            "alternative_embodiments": "????",
         },
     }
 
@@ -2069,7 +1687,7 @@ def continue_draft(
         raise ApiError(
             http_status=400,
             code="E400_INVALID_INPUT",
-            message="δ������ʵ LLM������ִ����ЧС�ġ�����������ʵģ�ͣ����ύ�˹�������� approved_specification��",
+            message="\u5f53\u524d\u4e3a Stub \u6a21\u5f0f\uff08\u672a\u542f\u7528\u771f\u5b9e LLM\uff09\uff0c\u4e0d\u80fd\u81ea\u52a8\u901a\u8fc7\u8bf4\u660e\u4e66\u4fee\u8ba2\u3002\u8bf7\u63d0\u4ea4 approved_specification\u3002",
             session_id=session.session_id,
             details={
                 "current_step": current_step or "unknown",
@@ -2088,7 +1706,7 @@ def continue_draft(
             raise ApiError(
                 http_status=400,
                 code="E400_INVALID_INPUT",
-                message="human_review_node ��Ҫ�ύ approved_claims��",
+                message="human_review_node \u9700\u8981\u63d0\u4ea4 approved_claims\u3002",
                 session_id=session.session_id,
                 details={"current_step": current_step},
                 retryable=False,
@@ -2097,7 +1715,7 @@ def continue_draft(
             raise ApiError(
                 http_status=400,
                 code="E400_INVALID_INPUT",
-                message="claims_revise_review_node ��Ҫ��ѡһ��apply_auto_claim_revision=true �� approved_claims��",
+                message="claims_revise_review_node \u9700\u8981\u4e8c\u9009\u4e00\uff1aapply_auto_claim_revision=true \u6216\u63d0\u4ea4 approved_claims\u3002",
                 session_id=session.session_id,
                 details={"current_step": current_step},
                 retryable=False,
@@ -2298,25 +1916,25 @@ def start_oa(
             resolved_prior_paths.append(prior_path)
         oa_source_text = "\n".join(
             [
-                "[������֪ͨ��]",
+                "[\u5ba1\u67e5\u610f\u89c1\u901a\u77e5\u4e66]",
                 notice_text,
                 "",
-                "[�����ļ�]",
+                "[\u7533\u8bf7\u6587\u4ef6]",
                 application_text,
                 "",
-                "[�Ա��ļ�]",
+                "[\u5bf9\u6bd4\u6587\u4ef6]",
                 *prior_parts,
             ]
         )
         oa_text = "\n".join(
             [
-                "[������֪ͨ��_���Ա�������]",
+                "[\u5ba1\u67e5\u610f\u89c1\u901a\u77e5\u4e66_\u5bf9\u6bd4\u805a\u7126\u6458\u8981]",
                 focused_notice_text,
                 "",
-                "[�����ļ�]",
+                "[\u7533\u8bf7\u6587\u4ef6]",
                 application_text,
                 "",
-                "[�Ա��ļ�]",
+                "[\u5bf9\u6bd4\u6587\u4ef6]",
                 *prior_parts,
             ]
         )
@@ -2748,10 +2366,10 @@ def start_compare(
         prior_arts_paths = resolved_prior_paths
         compare_source_text = "\n".join(
             [
-                "[�����ļ�]",
+                "[\u7533\u8bf7\u6587\u4ef6]",
                 application_text,
                 "",
-                "[�Ա��ļ�]",
+                "[\u5bf9\u6bd4\u6587\u4ef6]",
                 *prior_parts,
             ]
         )
@@ -3231,4 +2849,3 @@ async def stream_session_events(
             await asyncio.sleep(1)
 
     return StreamingResponse(_event_generator(), media_type="text/event-stream")
-

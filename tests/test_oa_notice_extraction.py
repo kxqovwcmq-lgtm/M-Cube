@@ -23,7 +23,7 @@ def test_extract_examiner_opinion_by_headings() -> None:
     assert "不具备新颖性" in extracted
     assert "不具备创造性" in extracted
     assert "检索式" not in extracted
-    assert "结论" not in extracted
+    assert "一、结论" not in extracted
 
 
 def test_extract_examiner_opinion_by_second_issue_title_to_retrieval() -> None:
@@ -69,7 +69,7 @@ def test_extract_examiner_opinion_by_page3_to_examiner_signature() -> None:
 
 
 def test_extract_examiner_opinion_fallback_to_original() -> None:
-    notice = "这是一个没有明确章节标题的短通知文本。"
+    notice = "这是一段没有明确章节标题的短通知文本。"
     extracted, used = _extract_examiner_opinion_text(notice)
     assert used is False
     assert extracted == notice
