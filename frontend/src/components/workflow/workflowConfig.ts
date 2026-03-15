@@ -12,6 +12,15 @@ export interface WorkflowOutputConfig {
 }
 
 const OUTPUT_KEY_ALIASES: Partial<Record<Exclude<GlobalTab, "home" | "settings">, Record<string, string[]>>> = {
+  draft: {
+    specification: [
+      "specification",
+      "approved_specification",
+      "application_specification",
+      "final_specification",
+      "specification_text",
+    ],
+  },
   polish: {
     diagnostic_report: ["diagnostic_report"],
     synergy_vault: ["synergy_feature_vault"],

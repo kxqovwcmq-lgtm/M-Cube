@@ -26,6 +26,7 @@ def main() -> None:
 
     target = _host_target_triple()
     is_windows = "windows" in target
+    data_sep = ";" if is_windows else ":"
     sidecar_base = "mcube-backend"
     pyinstaller_name = sidecar_base
 
@@ -50,6 +51,8 @@ def main() -> None:
         str(work_dir),
         "--specpath",
         str(spec_dir),
+        "--add-data",
+        f"{root / 'prompts' / 'templates' / 'spec_writer_zh.md'}{data_sep}prompts/templates",
         str(entry),
     ]
     print("Running:", " ".join(cmd))

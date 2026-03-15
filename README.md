@@ -59,7 +59,7 @@ M-Cube adopts a high-performance hybrid architecture of `FastAPI + React + Tauri
 
 Under the project directory:
 
-Windows (PowerShell):
+Windows:
 ```powershell
 copy .env.example .env
 ```

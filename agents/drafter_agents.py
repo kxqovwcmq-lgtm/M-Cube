@@ -389,6 +389,9 @@ def logic_review_node(
     passed = len(issues) == 0
     return {
         "review_issues": issues,
+        # Keep specification in the node output so environments that return
+        # only terminal-node deltas still retain write_spec results.
+        "specification": state.get("specification"),
         "current_step": "logic_review_node",
         "status": "completed" if passed else "running",
         "node_latency_ms": _duration_ms(started_at),

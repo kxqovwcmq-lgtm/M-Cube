@@ -92,7 +92,7 @@ def _append_event(
     event_type: str,
     payload: dict[str, Any],
     store: InMemorySessionStore,
-) -> None:
+    ) -> None:
     store.append_event(
         session_id,
         {
@@ -143,6 +143,14 @@ def _extract_examiner_opinion_text(notice_text: str, *, notice_pages: list[str] 
         "瀹℃煡鍛樹唬鐮",
         "瀹℃煡鍛樺鍚嶏細",
         "瀹℃煡鍛樹唬鐮侊細",
+    )
+
+
+def _is_doc_image_dependency_error(message: str) -> bool:
+    msg = (message or "").lower()
+    return (
+        "failed to parse doc images" in msg
+        and ("microsoft word" in msg or "libreoffice" in msg or "soffice" in msg or "pywin32" in msg)
     )
     retrieval_markers = (
         "检索报告",
@@ -1029,6 +1037,72 @@ _POLISH_STUBS = {
     },
 }
 
+def _minimal_specification_stub() -> dict[str, Any]:
+    """
+    Stable fallback stub for draft specification generation.
+    Must satisfy models.draft_schemas.Specification constraints.
+    """
+    return {
+        "title": "一种多级联动控制系统",
+        "technical_field": "本发明涉及工业自动化控制技术领域，尤其涉及一种用于多执行单元协同调度与状态闭环控制的系统与方法。",
+        "background_art": (
+            "现有控制系统通常采用静态参数或单点控制方式，面对复杂工况时容易出现响应滞后、控制精度下降和协同失衡等问题。"
+            "尤其在多执行单元并行工作场景中，缺乏统一状态感知与联动策略会导致系统振荡、能耗上升以及维护成本增加。"
+            "因此，需要一种能够实现实时监测、动态决策与闭环执行的一体化控制方案。"
+        ),
+        "invention_content": {
+            "technical_problem": "本发明要解决的技术问题在于：在多执行单元协同场景下，如何同时提升状态感知准确性、联动控制稳定性以及异常恢复能力。",
+            "technical_solution": (
+                "本发明提供一种多级联动控制系统，包括监测单元、执行单元以及协同决策单元。"
+                "监测单元用于实时采集设备运行状态并输出结构化状态信息；"
+                "协同决策单元基于状态信息进行联动关系计算，生成执行策略与修正指令；"
+                "执行单元根据所述执行策略完成动作输出，并将执行反馈回传至协同决策单元形成闭环。"
+                "在异常场景下，系统根据预设规则自动触发降级与恢复流程，从而保证连续运行能力。"
+            ),
+            "beneficial_effects": (
+                "与现有技术相比，本发明通过监测-决策-执行闭环链路显著提高了控制稳定性与响应速度。"
+                "同时，借助多执行单元协同策略可降低系统振荡风险，提升复杂工况下的任务完成率。"
+                "此外，异常降级与恢复机制能够减少人工干预频次并降低运维成本。"
+            ),
+        },
+        "drawings_description": "图1为系统总体结构示意图；图2为监测单元与执行单元的连接关系示意图；图3为控制流程示意图。",
+        "detailed_implementation": {
+            "introductory_boilerplate": "以下结合附图对本发明实施例作进一步详细说明，所述实施例用于说明本发明而非限制本发明的保护范围。",
+            "overall_architecture": (
+                "如图1所示，系统由监测单元、协同决策单元和执行单元构成。"
+                "监测单元持续采集温度、压力、位移或转速等运行参数，并通过数据总线发送至协同决策单元。"
+                "协同决策单元根据多源参数构建状态向量，执行联动规则匹配与控制量计算，再将控制指令下发至执行单元。"
+                "执行单元完成动作后回传反馈，形成实时闭环。"
+            ),
+            "component_details": [
+                {
+                    "feature_name": "监测单元",
+                    "structure_and_connection": "监测单元包括传感器组、信号调理模块和通信接口，所述通信接口与协同决策单元双向连接，用于传输状态数据与校准参数。",
+                    "working_principle": "监测单元对关键工况参数进行周期采样与异常识别，并将结构化状态信息发送至协同决策单元作为联动计算输入。",
+                },
+                {
+                    "feature_name": "协同决策单元",
+                    "structure_and_connection": "协同决策单元与监测单元、执行单元分别连接，内置策略引擎和状态评估模块，用于生成多执行对象的协同控制指令。",
+                    "working_principle": "协同决策单元根据实时状态进行目标匹配与约束求解，输出主控制量和修正控制量，实现多执行单元的协调动作。",
+                },
+                {
+                    "feature_name": "执行单元",
+                    "structure_and_connection": "执行单元包括驱动模块与执行机构，驱动模块接收协同决策单元下发的控制指令并驱动执行机构完成预设动作。",
+                    "working_principle": "执行单元按照指令完成动作并实时回传执行反馈，当反馈偏离阈值时触发修正流程，以保证控制过程稳定。",
+                },
+            ],
+            "workflow_description": (
+                "系统启动后，监测单元先完成参数采集与状态上报；"
+                "协同决策单元随后执行策略计算并下发控制指令；"
+                "执行单元完成动作并回传反馈；"
+                "协同决策单元根据反馈进行二次修正，必要时触发异常降级策略；"
+                "整个流程循环执行，维持系统在目标工况下稳定运行。"
+            ),
+            "alternative_embodiments": "在其他实施方式中，监测单元可采用不同类型传感器组合，协同决策单元可采用规则引擎或学习型模型实现，执行单元可根据应用场景替换为液压、气动或电驱机构。",
+        },
+    }
+
+
 def _build_draft_graph_for_runtime(*, llm_runtime: dict[str, Any], llm_api_key: str | None):
     llm_callable = build_llm_callable(
         provider=llm_runtime.get("provider"),
@@ -1071,7 +1145,7 @@ def _build_draft_graph_for_runtime(*, llm_runtime: dict[str, Any], llm_api_key: 
         ),
         write_spec_agent=BaseStructuredAgent[Specification](
             name="write_spec_agent",
-            llm_callable=llm_callable or _make_stub_llm_callable(_DRAFT_STUBS["write_spec"]),
+            llm_callable=llm_callable or _make_stub_llm_callable(_minimal_specification_stub()),
             retry_policy=RetryPolicy(max_retries=3),
         ),
     )
@@ -1583,6 +1657,16 @@ def _extract_uploaded_images(file_id: str, store: InMemoryFileStore) -> list[dic
         ) from exc
     except ValueError as exc:
         message = str(exc)
+        if _is_doc_image_dependency_error(message):
+            # Docker/Linux environments may not have Word/LibreOffice for legacy DOC image extraction.
+            # Degrade to text-only flow instead of hard failing the upload/workflow.
+            _structured_log(
+                "doc_image_extract_degraded",
+                file_id=file_id,
+                filename=record.filename,
+                reason=message,
+            )
+            return []
         exceeds_limit = "exceeds limit" in message.lower()
         raise ApiError(
             http_status=413 if exceeds_limit else 400,
@@ -1643,17 +1727,27 @@ async def upload_file(
     try:
         extracted_images = _DOC_PARSER.extract_images(record.path, source_file_id=record.file_id)
     except (FileNotFoundError, ValueError) as exc:
-        store.delete(record.file_id)
         message = str(exc)
-        exceeds_limit = "exceeds limit" in message.lower()
-        raise ApiError(
-            http_status=413 if exceeds_limit else 400,
-            code="E413_IMAGE_LIMIT_EXCEEDED" if exceeds_limit else "E400_INVALID_INPUT",
-            message=message,
-            session_id="unknown",
-            details={"filename": record.filename},
-            retryable=False,
-        ) from exc
+        if isinstance(exc, ValueError) and _is_doc_image_dependency_error(message):
+            # Allow upload to proceed as text-only when DOC image extraction dependencies are unavailable.
+            _structured_log(
+                "upload_doc_image_extract_degraded",
+                file_id=record.file_id,
+                filename=record.filename,
+                reason=message,
+            )
+            extracted_images = []
+        else:
+            store.delete(record.file_id)
+            exceeds_limit = "exceeds limit" in message.lower()
+            raise ApiError(
+                http_status=413 if exceeds_limit else 400,
+                code="E413_IMAGE_LIMIT_EXCEEDED" if exceeds_limit else "E400_INVALID_INPUT",
+                message=message,
+                session_id="unknown",
+                details={"filename": record.filename},
+                retryable=False,
+            ) from exc
 
     file_kind = "mixed" if len(extracted_images) > 0 else "text"
 
@@ -2039,7 +2133,7 @@ def continue_draft(
         "claims": output.get("claims"),
         "drawing_map": output.get("drawing_map"),
         "claim_traceability": output.get("claim_traceability"),
-        "specification": output.get("specification"),
+        "specification": output.get("specification", session.data.get("specification")),
         "vision_warnings": output.get("vision_warnings", session.data.get("vision_warnings", [])),
         "review_issues": output.get("review_issues", []),
         "claim_revision_count": output.get("claim_revision_count", session.data.get("claim_revision_count", 0)),

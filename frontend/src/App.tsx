@@ -129,6 +129,7 @@ function App() {
   const { appendEvent, clearEvents } = useLogStore();
   const {
     claims,
+    specification,
     applicationImagesMeta,
     priorArtImagesMeta,
     setDisclosureText,
@@ -234,8 +235,21 @@ function App() {
   const selectedNodeValue = useMemo(() => {
     if (!selectedOutputConfig || !sessionData) return null;
     if (activeTab === "home" || activeTab === "settings") return null;
-    return getWorkflowOutputValue(activeTab, selectedOutputConfig.valueKey, sessionData);
-  }, [activeTab, selectedOutputConfig, sessionData]);
+    const primary = getWorkflowOutputValue(activeTab, selectedOutputConfig.valueKey, sessionData);
+    if (primary !== null && primary !== undefined) return primary;
+    if (activeTab === "draft" && selectedNodeId === "write_spec_node") {
+      return (
+        sessionData.specification ??
+        sessionData.approved_specification ??
+        sessionData.application_specification ??
+        sessionData.final_specification ??
+        sessionData.specification_text ??
+        specification ??
+        null
+      );
+    }
+    return primary;
+  }, [activeTab, selectedNodeId, selectedOutputConfig, sessionData, specification]);
 
   const currentStepLabel = useMemo(() => {
     if (activeTab === "home" || activeTab === "settings") return "";

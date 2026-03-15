@@ -6,6 +6,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Install system dependencies required by DOC/DOCX conversion/image extraction in Docker.
+# - libreoffice / soffice: convert legacy .doc -> .docx for text and image extraction.
+# - fonts-dejavu-core: provide baseline fonts for headless conversion stability.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       libreoffice \
+       libreoffice-writer \
+       fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Python dependencies first for better layer caching.
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip setuptools wheel \
