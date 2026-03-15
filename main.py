@@ -23,7 +23,8 @@ logger = logging.getLogger("app")
 
 # Auto-load project root .env for local/dev runs.
 # Existing process env vars still take precedence (override=False).
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=False)
+if os.getenv("MCUBE_DISABLE_DOTENV", "").strip().lower() not in {"1", "true", "yes"}:
+    load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=False)
 
 
 def _parse_cors_origins() -> list[str]:

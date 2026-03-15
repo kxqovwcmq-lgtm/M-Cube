@@ -180,12 +180,18 @@ def _human_review_step(state: DraftingState) -> dict[str, Any]:
         }
     )
 
-    if not isinstance(resumed, dict) or "approved_claims" not in resumed:
-        return _record_node_error(
-            state,
-            "human_review_node",
-            ValueError("Missing 'approved_claims' in HITL resume payload."),
-        )
+    if not isinstance(resumed, dict):
+        return {
+            "status": "waiting_human",
+            "current_step": "human_review_node",
+            "last_error": None,
+        }
+    if "approved_claims" not in resumed:
+        return {
+            "status": "waiting_human",
+            "current_step": "human_review_node",
+            "last_error": None,
+        }
 
     return {
         "approved_claims": resumed["approved_claims"],
@@ -219,11 +225,11 @@ def _claims_revise_review_step(state: DraftingState) -> dict[str, Any]:
     )
 
     if not isinstance(resumed, dict):
-        return _record_node_error(
-            state,
-            "claims_revise_review_node",
-            ValueError("Invalid claims revise review resume payload."),
-        )
+        return {
+            "status": "waiting_human",
+            "current_step": "claims_revise_review_node",
+            "last_error": None,
+        }
 
     if resumed.get("apply_auto_claim_revision") is True:
         return {
@@ -244,11 +250,11 @@ def _claims_revise_review_step(state: DraftingState) -> dict[str, Any]:
             "last_error": None,
         }
 
-    return _record_node_error(
-        state,
-        "claims_revise_review_node",
-        ValueError("Missing 'apply_auto_claim_revision' or 'approved_claims' in resume payload."),
-    )
+    return {
+        "status": "waiting_human",
+        "current_step": "claims_revise_review_node",
+        "last_error": None,
+    }
 
 
 def _spec_review_step(state: DraftingState) -> dict[str, Any]:
@@ -284,11 +290,11 @@ def _spec_review_step(state: DraftingState) -> dict[str, Any]:
     )
 
     if not isinstance(resumed, dict):
-        return _record_node_error(
-            state,
-            "spec_review_node",
-            ValueError("Invalid spec review resume payload."),
-        )
+        return {
+            "status": "waiting_human",
+            "current_step": "spec_review_node",
+            "last_error": None,
+        }
 
     if "approved_specification" in resumed:
         return {
@@ -303,11 +309,11 @@ def _spec_review_step(state: DraftingState) -> dict[str, Any]:
 
     apply_targeted_revision = resumed.get("apply_targeted_revision", True)
     if apply_targeted_revision is False:
-        return _record_node_error(
-            state,
-            "spec_review_node",
-            ValueError("Missing 'approved_specification' when apply_targeted_revision is false."),
-        )
+        return {
+            "status": "waiting_human",
+            "current_step": "spec_review_node",
+            "last_error": None,
+        }
 
     return {
         "revision_instruction": resumed.get("revision_instruction"),
